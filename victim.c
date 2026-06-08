@@ -7,7 +7,7 @@ void victim(size_t victim_set, size_t victim_line)
 {
     if (victim_set >= NUM_SETS || victim_line == 0 || victim_line > NUM_LINES)
     {
-        return;  // invalid victim set or line
+        return;
     }
     
     volatile uint8_t temp = 0;
