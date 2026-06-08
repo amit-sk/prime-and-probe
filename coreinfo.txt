@@ -1,0 +1,26 @@
+Tested machine info:
+
+Logical CPUs 0 and 1   share L1D cache 0
+Logical CPUs 2 and 3   share L1D cache 1
+Logical CPUs 4 and 5   share L1D cache 2
+Logical CPUs 6 and 7   share L1D cache 3
+Logical CPUs 8 and 9   share L1D cache 4
+Logical CPUs 10 and 11 share L1D cache 5
+Logical CPU 12         has L1D cache 6
+Logical CPU 13         has L1D cache 7
+Logical CPU 14         has L1D cache 8
+Logical CPU 15         has L1D cache 9
+
+Data Cache 0–5, Level 1:
+48 KB = 49,152 bytes
+12-way set associative
+64-byte cache lines
+sets = 49,152 / (12 × 64) = 64
+=> 64 sets, each with 12 lines/ways
+
+Data Cache 6–9, Level 1:
+32 KB = 32,768 bytes
+8-way set associative
+64-byte cache lines
+sets = 32,768 / (8 × 64) = 64
+=> 64 sets, each with 8 lines/ways
