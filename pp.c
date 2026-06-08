@@ -65,7 +65,7 @@ void prime(void)
     (void)temp;
 }
 
-void probe(uint64_t result[NUM_SETS])
+void probe(uint64_t result[NUM_SETS], uint64_t counts[NUM_SETS])
 {
     uint32_t dummy = 0;
     volatile uint8_t temp = 0;
@@ -84,6 +84,7 @@ void probe(uint64_t result[NUM_SETS])
 
             /* TODO: remove outliers (?) */
             result[set] += (end - start);  // summing probe time for all lines in the set
+            counts[set]++;
         }
     }
 }
@@ -93,7 +94,7 @@ int main(void)
     ppinit();
 
     uint64_t sum_results[NUM_SETS][VICTIM_NUM_LINES_OPTIONS][NUM_SETS] = {{{0}}};  // sum of probe times for each set, given victim set and line
-    uint64_t count_results[NUM_SETS][VICTIM_NUM_LINES_OPTIONS] = {{0}};  // count of each victim set and line randomly chosen
+    uint64_t count_results[NUM_SETS][VICTIM_NUM_LINES_OPTIONS][NUM_SETS] = {{{0}}};  // count of accepted (non-outlier) values for each victim set and line randomly chosen
 
     for (size_t i = 0; i < REPETITIONS; i++)
     {
@@ -101,9 +102,8 @@ int main(void)
         /* TODO: choose set and line */
         size_t victim_set = rand() % NUM_SETS;
         size_t victim_line = rand() % VICTIM_NUM_LINES_OPTIONS;
-        count_results[victim_set][victim_line]++;
         /* TODO: victim */
-        probe(&sum_results[victim_set][victim_line][0]);  // TODO: pass correct victim set and line
+        probe(&sum_results[victim_set][victim_line][0], &count_results[victim_set][victim_line][0]);  // TODO: pass correct victim set and line
     }
 
     /* TODO: report results in csv format */
@@ -114,7 +114,7 @@ int main(void)
         {
             for (size_t set = 0; set < NUM_SETS; set++)
             {
-                printf("%zu,%zu,%zu,%zu,%zu\n", victim_set, victim_line, set, count_results[victim_set][victim_line], sum_results[victim_set][victim_line][set]);
+                printf("%zu,%zu,%zu,%zu,%zu\n", victim_set, victim_line, set, count_results[victim_set][victim_line][set], sum_results[victim_set][victim_line][set]);
             }
         }
     }
