@@ -3,10 +3,11 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <x86intrin.h>
+
 #include "consts.h"
+#include "victim.h"
 
 #define REPETITIONS (100000)
-#define VICTIM_NUM_LINES_OPTIONS (13)
 
 static volatile uint8_t buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE] __attribute__((aligned(4096))) = {0};
 static size_t set_order[NUM_SETS] = {0};
@@ -85,7 +86,7 @@ void probe(uint64_t result[NUM_SETS], uint64_t counts[NUM_SETS])
             uint64_t duration = end - start;
             if (duration < 5000)  // appears to be way above reasonable
             {
-                result[set] += (end - start);  // summing probe time for all lines in the set
+                result[set] += duration;  // summing probe time for all lines in the set
                 counts[set]++;
             }
         }
@@ -104,8 +105,8 @@ int main(void)
         prime();
         size_t victim_set = rand() % NUM_SETS;
         size_t victim_line = rand() % VICTIM_NUM_LINES_OPTIONS;
-        /* TODO: victim */
-        probe(&sum_results[victim_set][victim_line][0], &count_results[victim_set][victim_line][0]);  // TODO: pass correct victim set and line
+        victim(victim_set, victim_line);
+        probe(&sum_results[victim_set][victim_line][0], &count_results[victim_set][victim_line][0]);
     }
 
     printf("victim_set,victim_line,probe_set,count,sum_probe_time\n");

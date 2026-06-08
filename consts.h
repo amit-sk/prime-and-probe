@@ -8,4 +8,7 @@
 // Assuming assignment to logical cores 0-11
 #define NUM_LINES (12)
 
+// assignment allows values from 0-12
+#define VICTIM_NUM_LINES_OPTIONS (NUM_LINES + 1)
+
 #endif /* CONSTS_H */
