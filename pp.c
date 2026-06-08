@@ -82,9 +82,12 @@ void probe(uint64_t result[NUM_SETS], uint64_t counts[NUM_SETS])
             temp ^= buffer[(line * LINE_SEPARATION_IN_BYTES) + (set * BLOCK_SIZE)];
             uint64_t end = __rdtscp(&dummy);
 
-            /* TODO: remove outliers (?) */
-            result[set] += (end - start);  // summing probe time for all lines in the set
-            counts[set]++;
+            uint64_t duration = end - start;
+            if (duration < 5000)  // appears to be way above reasonable
+            {
+                result[set] += (end - start);  // summing probe time for all lines in the set
+                counts[set]++;
+            }
         }
     }
 }
@@ -99,14 +102,12 @@ int main(void)
     for (size_t i = 0; i < REPETITIONS; i++)
     {
         prime();
-        /* TODO: choose set and line */
         size_t victim_set = rand() % NUM_SETS;
         size_t victim_line = rand() % VICTIM_NUM_LINES_OPTIONS;
         /* TODO: victim */
         probe(&sum_results[victim_set][victim_line][0], &count_results[victim_set][victim_line][0]);  // TODO: pass correct victim set and line
     }
 
-    /* TODO: report results in csv format */
     printf("victim_set,victim_line,probe_set,count,sum_probe_time\n");
     for (size_t victim_set = 0; victim_set < NUM_SETS; victim_set++)
     {
