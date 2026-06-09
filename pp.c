@@ -7,7 +7,7 @@
 #include "consts.h"
 #include "victim.h"
 
-#define REPETITIONS (100000)
+#define REPETITIONS (1000000)
 
 static volatile uint8_t buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE] __attribute__((aligned(4096))) = {0};
 static size_t set_order[NUM_SETS] = {0};
@@ -74,6 +74,7 @@ void probe(uint64_t result[NUM_SETS], uint64_t counts[NUM_SETS])
     for (size_t s = 0; s < NUM_SETS; s++)
     {
         size_t set = set_order[s];
+        uint64_t set_duration = 0;
 
         for (size_t l = 0; l < NUM_LINES; l++)
         {
@@ -82,13 +83,13 @@ void probe(uint64_t result[NUM_SETS], uint64_t counts[NUM_SETS])
             uint64_t start = __rdtscp(&dummy);
             temp ^= buffer[(line * LINE_SEPARATION_IN_BYTES) + (set * BLOCK_SIZE)];
             uint64_t end = __rdtscp(&dummy);
+            set_duration += (end - start);
+        }
 
-            uint64_t duration = end - start;
-            if (duration < 5000)  // appears to be way above reasonable
-            {
-                result[set] += duration;  // summing probe time for all lines in the set
-                counts[set]++;
-            }
+        if (set_duration < 1500)  // appears to be way above reasonable
+        {
+            result[set] += set_duration;  // summing probe time for all lines in the set
+            counts[set]++;  // to later calculate the average probe time for the set
         }
     }
 }
