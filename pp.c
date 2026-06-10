@@ -104,6 +104,18 @@ int main(void)
     for (size_t i = 0; i < REPETITIONS; i++)
     {
         prime();
+        fisher_yates_shuffle(set_order, NUM_SETS);
+        fisher_yates_shuffle(line_order, NUM_LINES);
+        prime();
+        fisher_yates_shuffle(set_order, NUM_SETS);
+        fisher_yates_shuffle(line_order, NUM_LINES);
+        prime();
+        fisher_yates_shuffle(set_order, NUM_SETS);
+        fisher_yates_shuffle(line_order, NUM_LINES);
+        prime();
+        fisher_yates_shuffle(set_order, NUM_SETS);
+        fisher_yates_shuffle(line_order, NUM_LINES);
+        prime();
         size_t victim_set = rand() % NUM_SETS;
         size_t victim_line = rand() % VICTIM_NUM_LINES_OPTIONS;
         victim(victim_set, victim_line);
