@@ -10,7 +10,7 @@
 #include "victim.h"
 
 #define REPETITIONS (1000000)
-#define GET_BUFFER_IDX(set, line) (((line * NUM_SETS) + (set * BLOCK_SIZE)) / sizeof(uint16_t))
+#define GET_BUFFER_IDX(set, line) (((line * LINE_SEPARATION_IN_BYTES) + (set * BLOCK_SIZE)) / sizeof(uint16_t))
 
 // static volatile uint8_t buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE] __attribute__((aligned(4096))) = {0};
 static volatile uint16_t buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE / sizeof(uint16_t)] __attribute__((aligned(4096))) = {0};
@@ -20,6 +20,18 @@ static uint16_t line_order[NUM_LINES] = {0};
 #define BUFFER_NUM_ELEMS (NUM_SETS * NUM_LINES * BLOCK_SIZE / sizeof(uint16_t))
 _Static_assert(BUFFER_NUM_ELEMS <= UINT16_MAX, "uint16_t is too small to index the buffer");
 
+
+// for debugging pointer chasing
+void print_set_and_line_from_elem_index(uint16_t idx)
+{
+    size_t byte_offset = (size_t)idx * sizeof(uint16_t);
+
+    size_t line = byte_offset / LINE_SEPARATION_IN_BYTES;
+    size_t rem  = byte_offset % LINE_SEPARATION_IN_BYTES;
+    size_t set  = rem / BLOCK_SIZE;
+
+    printf("idx=%u, set=%zu, line=%zu\n", idx, set, line);
+}
 
 void fisher_yates_shuffle(uint16_t *array, size_t n)
 {
