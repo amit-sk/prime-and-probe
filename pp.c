@@ -10,7 +10,7 @@
 #include "victim.h"
 
 #define REPETITIONS (1000000)
-#define GET_BUFFER_IDX(set, line) (((line * LINE_SEPARATION_IN_BYTES) + (set * BLOCK_SIZE)) / sizeof(uint16_t))
+#define GET_BUFFER_IDX(set, line) ((((line) * LINE_SEPARATION_IN_BYTES) + ((set) * BLOCK_SIZE)) / sizeof(uint16_t))
 
 // static volatile uint8_t buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE] __attribute__((aligned(4096))) = {0};
 static volatile uint16_t buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE / sizeof(uint16_t)] __attribute__((aligned(4096))) = {0};
@@ -163,9 +163,9 @@ int main(void)
     {
         prime();
         size_t victim_set = rand() % NUM_SETS;
-        size_t victim_line = rand() % VICTIM_NUM_LINES_OPTIONS;
-        victim(victim_set, victim_line);
-        probe(&sum_results[victim_set][victim_line][0], &count_results[victim_set][victim_line][0]);
+        size_t victim_line_count = rand() % VICTIM_NUM_LINES_OPTIONS;
+        victim(victim_set, victim_line_count);
+        probe(&sum_results[victim_set][victim_line_count][0], &count_results[victim_set][victim_line_count][0]);
 
         // uint64_t before = probe17();
         // victim(set_order[17], 10);
@@ -183,14 +183,14 @@ int main(void)
     //     printf("%" PRIu64 ",%" PRIu64 "\n", probe_times[i*2], probe_times[i*2 + 1]);
     // }
 
-    printf("victim_set,victim_line,probe_set,count,sum_probe_time\n");
+    printf("victim_set,victim_line_count,probe_set,count,sum_probe_time\n");
     for (size_t victim_set = 0; victim_set < NUM_SETS; victim_set++)
     {
-        for (size_t victim_line = 0; victim_line < VICTIM_NUM_LINES_OPTIONS; victim_line++)
+        for (size_t victim_line_count = 0; victim_line_count < VICTIM_NUM_LINES_OPTIONS; victim_line_count++)
         {
             for (size_t set = 0; set < NUM_SETS; set++)
             {
-                printf("%zu,%zu,%zu,%zu,%zu\n", victim_set, victim_line, set, count_results[victim_set][victim_line][set], sum_results[victim_set][victim_line][set]);
+                printf("%zu,%zu,%zu,%zu,%zu\n", victim_set, victim_line_count, set, count_results[victim_set][victim_line_count][set], sum_results[victim_set][victim_line_count][set]);
             }
         }
     }

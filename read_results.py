@@ -7,18 +7,22 @@ def read_results(file_path):
 
     # only need results for when the probed set == the victim set
     results = df[df['probe_set'] == df['victim_set']]
-    results = results[['victim_set', 'victim_line', 'avg']].reset_index(drop=True)
+    results = results[['victim_set', 'victim_line_count', 'avg']].reset_index(drop=True)
 
     heatmap_data = results.pivot(
-        index="victim_line",
+        index="victim_line_count",
         columns="victim_set",
         values="avg",
     )
+    # vmin = results["avg"].quantile(0.05)
+    # vmax = results["avg"].quantile(0.95)
     plt.figure(figsize=(12, 4))
     plt.imshow(
         heatmap_data,
         aspect="auto",
         origin="lower",
+        # vmin=vmin,
+        # vmax=vmax
     )
 
     plt.colorbar(label="Average probe time")
