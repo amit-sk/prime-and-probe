@@ -237,12 +237,50 @@ void prime_and_probe_set(size_t repetitions, size_t set, size_t lines)
     free(probe_times);
 }
 
+struct probe_set_whole_set_meas_results
+{
+    uint64_t before;
+    uint64_t after;
+};
+
+void prime_and_probe_set_whole_set_meas(size_t repetitions, size_t set, size_t lines)
+{
+    struct probe_set_whole_set_meas_results results = {0};
+    struct probe_set_whole_set_meas_results *probe_times = calloc(repetitions, sizeof(results));
+
+    for (size_t i = 0; i < repetitions; i++)
+    {
+        memset(&results, 0, sizeof(results));
+        prime();
+        results.before = probe_set_whole_set_meas(set);
+        victim(set_order[set], lines);
+        results.after = probe_set_whole_set_meas(set);
+
+        if (results.before > 300 || results.after > 300)
+        {
+            continue; // will remain 0. to filter later.
+        }
+        probe_times[i] = results;
+    }
+
+    printf("before,after\n");
+    for (size_t i = 0; i < repetitions; i++)
+    {
+        for (size_t l = 0; l < NUM_LINES; l++)
+        {
+            printf("%lu,%lu\n", (unsigned long)probe_times[i].before, (unsigned long)probe_times[i].after);
+        }
+    }
+    free(probe_times);
+}
+
 int main(void)
 {
     ppinit();
 
     // prime_and_probe(REPETITIONS);
-    prime_and_probe_set(REPETITIONS, 17, 6);
+    // prime_and_probe_set(REPETITIONS, 17, 6);
+    prime_and_probe_set_whole_set_meas(REPETITIONS, 17, 6);
 
     return 0;
 }
