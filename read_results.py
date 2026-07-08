@@ -38,7 +38,7 @@ def read_results(file_path):
     plt.show()
 
 def main():
-    file_path = "./results/results.csv"
+    file_path = "./results/raw/results.csv"
     read_results(file_path)
 
 if __name__ == "__main__":

@@ -13,6 +13,10 @@
 
 #define REPETITIONS (1000000)
 
+#define PRIME_AND_PROBE_RESULTS_FILENAME ("./results/raw/results.csv")
+#define PRIME_AND_PROBE_SET_RESULTS_FILENAME ("./results/raw/results_set_%zu_lines.csv")
+#define PRIME_AND_PROBE_SET_PER_LINE_RESULTS_FILENAME ("./results/raw/results_set_per_line_%zu_lines.csv")
+
 // static volatile uint8_t buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE] __attribute__((aligned(4096))) = {0};
 static volatile uint16_t buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE / sizeof(uint16_t)] __attribute__((aligned(4096))) = {0};
 static uint16_t set_order[NUM_SETS] = {0};
@@ -136,17 +140,19 @@ void prime_and_probe(size_t repetitions)
         probe(&sum_results[victim_set][victim_line_count][0], &count_results[victim_set][victim_line_count][0]);
     }
 
-    printf("victim_set,victim_line_count,probe_set,count,sum_probe_time\n");
+    FILE *fp = fopen(PRIME_AND_PROBE_RESULTS_FILENAME, "w");
+    fprintf(fp, "victim_set,victim_line_count,probe_set,count,sum_probe_time\n");
     for (size_t victim_set = 0; victim_set < NUM_SETS; victim_set++)
     {
         for (size_t victim_line_count = 0; victim_line_count < VICTIM_NUM_LINES_OPTIONS; victim_line_count++)
         {
             for (size_t set = 0; set < NUM_SETS; set++)
             {
-                printf("%zu,%zu,%zu,%zu,%zu\n", victim_set, victim_line_count, set, count_results[victim_set][victim_line_count][set], sum_results[victim_set][victim_line_count][set]);
+                fprintf(fp, "%zu,%zu,%zu,%zu,%zu\n", victim_set, victim_line_count, set, count_results[victim_set][victim_line_count][set], sum_results[victim_set][victim_line_count][set]);
             }
         }
     }
+    fclose(fp);
 }
 
 void prime_and_probe_set(size_t repetitions, size_t set, size_t lines)
@@ -168,15 +174,20 @@ void prime_and_probe_set(size_t repetitions, size_t set, size_t lines)
         probe_times[i] = results;
     }
 
-    printf("line,before,after\n");
+    char filename[sizeof(PRIME_AND_PROBE_SET_PER_LINE_RESULTS_FILENAME) + 20];
+    snprintf(filename, sizeof(filename), PRIME_AND_PROBE_SET_PER_LINE_RESULTS_FILENAME, lines);
+    printf("%s\n", filename);
+    FILE *fp = fopen(filename, "w");
+    fprintf(fp, "line,before,after\n");
     for (size_t i = 0; i < repetitions; i++)
     {
         for (size_t l = 0; l < NUM_LINES; l++)
         {
-            printf("%hu,%lu,%lu\n", line_order[l], (unsigned long)probe_times[i].before[line_order[l]], (unsigned long)probe_times[i].after[line_order[l]]);
+            fprintf(fp, "%hu,%lu,%lu\n", line_order[l], (unsigned long)probe_times[i].before[line_order[l]], (unsigned long)probe_times[i].after[line_order[l]]);
         }
     }
     free(probe_times);
+    fclose(fp);
 }
 
 struct probe_set_whole_set_meas_results
@@ -205,15 +216,20 @@ void prime_and_probe_set_whole_set_meas(size_t repetitions, size_t set, size_t l
         probe_times[i] = results;
     }
 
-    printf("before,after\n");
+    char filename[sizeof(PRIME_AND_PROBE_SET_RESULTS_FILENAME) + 20];
+    snprintf(filename, sizeof(filename), PRIME_AND_PROBE_SET_RESULTS_FILENAME, lines);
+    printf("%s\n", filename);
+    FILE *fp = fopen(filename, "w");
+    fprintf(fp, "before,after\n");
     for (size_t i = 0; i < repetitions; i++)
     {
         for (size_t l = 0; l < NUM_LINES; l++)
         {
-            printf("%lu,%lu\n", (unsigned long)probe_times[i].before, (unsigned long)probe_times[i].after);
+            fprintf(fp, "%lu,%lu\n", (unsigned long)probe_times[i].before, (unsigned long)probe_times[i].after);
         }
     }
     free(probe_times);
+    fclose(fp);
 }
 
 int main(void)
@@ -221,8 +237,8 @@ int main(void)
     ppinit();
 
     prime_and_probe(REPETITIONS);
-    // prime_and_probe_set(REPETITIONS, 17, 6);
-    // prime_and_probe_set_whole_set_meas(REPETITIONS, 17, 6);
+    // prime_and_probe_set(REPETITIONS, 17, 3);
+    // prime_and_probe_set_whole_set_meas(REPETITIONS, 17, 11);
 
     return 0;
 }
