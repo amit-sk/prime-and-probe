@@ -21,6 +21,13 @@ static uint16_t line_order[NUM_LINES] = {0};
 #define BUFFER_NUM_ELEMS (NUM_SETS * NUM_LINES * BLOCK_SIZE / sizeof(uint16_t))
 _Static_assert(BUFFER_NUM_ELEMS <= UINT16_MAX, "uint16_t is too small to index the buffer");
 
+// for probing single set
+typedef struct
+{
+    uint64_t before[NUM_LINES];
+    uint64_t after[NUM_LINES];
+} test_results_t;
+
 
 // for debugging pointer chasing
 void print_set_and_line_from_elem_index(uint16_t idx)
@@ -136,12 +143,12 @@ void probe(uint64_t result[NUM_SETS], uint64_t counts[NUM_SETS])
     }
 }
 
-void probe17(uint64_t result[NUM_LINES])
+void probe_set(size_t set, uint64_t result[NUM_LINES])
 {
     uint64_t start = 0, end = 0, duration = 0;
     uint32_t dummy = 0;
-    const size_t set = set_order[17];
-    uint16_t idx = GET_BUFFER_IDX(set, line_order[0]);
+    const size_t set_perm = set_order[set];  // where it is in the permutation
+    uint16_t idx = GET_BUFFER_IDX(set_perm, line_order[0]);
 
     for (size_t l = 0; l < NUM_LINES; l++)
     {
@@ -156,34 +163,62 @@ void probe17(uint64_t result[NUM_LINES])
     }
 }
 
-typedef struct
+uint64_t probe_set_whole_set_meas(size_t set)
 {
-    uint64_t before[NUM_LINES];
-    uint64_t after[NUM_LINES];
-} test_results_t;
+    uint64_t start = 0, end = 0;
+    uint32_t dummy = 0;
+    const size_t set_perm = set_order[set];
+    uint16_t idx = GET_BUFFER_IDX(set_perm, line_order[0]);
 
-int main(void)
-{
-    ppinit();
-
-    // uint64_t sum_results[NUM_SETS][VICTIM_NUM_LINES_OPTIONS][NUM_SETS] = {{{0}}};  // sum of probe times for each set, given victim set and line
-    // uint64_t count_results[NUM_SETS][VICTIM_NUM_LINES_OPTIONS][NUM_SETS] = {{{0}}};  // count of accepted (non-outlier) values for each victim set and line randomly chosen
-    test_results_t results = {0};
-    test_results_t *probe_times = calloc(REPETITIONS, sizeof(test_results_t));
-
-    for (size_t i = 0; i < REPETITIONS; i++)
+    start = __rdtscp(&dummy);
+    for (size_t l = 0; l < NUM_LINES; l++)
     {
-        // prime();
-        // size_t victim_set = rand() % NUM_SETS;
-        // size_t victim_line_count = rand() % VICTIM_NUM_LINES_OPTIONS;
-        // victim(victim_set, victim_line_count);
-        // probe(&sum_results[victim_set][victim_line_count][0], &count_results[victim_set][victim_line_count][0]);
+        idx = buffer[idx];
+    }
+    end = __rdtscp(&dummy);
+    return (end - start);
+}
+
+void prime_and_probe(size_t repetitions)
+{
+    uint64_t sum_results[NUM_SETS][VICTIM_NUM_LINES_OPTIONS][NUM_SETS] = {{{0}}};  // sum of probe times for each set, given victim set and line
+    uint64_t count_results[NUM_SETS][VICTIM_NUM_LINES_OPTIONS][NUM_SETS] = {{{0}}};  // count of accepted (non-outlier) values for each victim set and line randomly chosen
+
+    for (size_t i = 0; i < repetitions; i++)
+    {
+        prime();
+        size_t victim_set = rand() % NUM_SETS;
+        size_t victim_line_count = rand() % VICTIM_NUM_LINES_OPTIONS;
+        victim(victim_set, victim_line_count);
+        probe(&sum_results[victim_set][victim_line_count][0], &count_results[victim_set][victim_line_count][0]);
+    }
+
+    printf("victim_set,victim_line_count,probe_set,count,sum_probe_time\n");
+    for (size_t victim_set = 0; victim_set < NUM_SETS; victim_set++)
+    {
+        for (size_t victim_line_count = 0; victim_line_count < VICTIM_NUM_LINES_OPTIONS; victim_line_count++)
+        {
+            for (size_t set = 0; set < NUM_SETS; set++)
+            {
+                printf("%zu,%zu,%zu,%zu,%zu\n", victim_set, victim_line_count, set, count_results[victim_set][victim_line_count][set], sum_results[victim_set][victim_line_count][set]);
+            }
+        }
+    }
+}
+
+void prime_and_probe_set(size_t repetitions, size_t set, size_t lines)
+{
+    test_results_t results = {0};
+    test_results_t *probe_times = calloc(repetitions, sizeof(test_results_t));
+
+    for (size_t i = 0; i < repetitions; i++)
+    {
 
         memset(&results, 0, sizeof(results));
         prime();
-        probe17(results.before);
-        victim(set_order[17], 6);
-        probe17(results.after);
+        probe_set(set, results.before);
+        victim(set_order[set], lines);
+        probe_set(set, results.after);
         // if (results.before[0] > 500 || results.after[0] > 500)
         // {
         //     continue; // will remain 0. to filter later.
@@ -192,7 +227,7 @@ int main(void)
     }
 
     printf("line,before,after\n");
-    for (size_t i = 0; i < REPETITIONS; i++)
+    for (size_t i = 0; i < repetitions; i++)
     {
         for (size_t l = 0; l < NUM_LINES; l++)
         {
@@ -200,17 +235,14 @@ int main(void)
         }
     }
     free(probe_times);
+}
 
-    // printf("victim_set,victim_line_count,probe_set,count,sum_probe_time\n");
-    // for (size_t victim_set = 0; victim_set < NUM_SETS; victim_set++)
-    // {
-    //     for (size_t victim_line_count = 0; victim_line_count < VICTIM_NUM_LINES_OPTIONS; victim_line_count++)
-    //     {
-    //         for (size_t set = 0; set < NUM_SETS; set++)
-    //         {
-    //             printf("%zu,%zu,%zu,%zu,%zu\n", victim_set, victim_line_count, set, count_results[victim_set][victim_line_count][set], sum_results[victim_set][victim_line_count][set]);
-    //         }
-    //     }
-    // }
+int main(void)
+{
+    ppinit();
+
+    // prime_and_probe(REPETITIONS);
+    prime_and_probe_set(REPETITIONS, 17, 6);
+
     return 0;
 }
