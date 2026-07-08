@@ -3,9 +3,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import ipdb
+
 
 def read_results(file_path, lines):
     df = pd.read_csv(file_path)[['before','after']]
+    # ipdb.set_trace()
     plt.figure(figsize=(8, 4))
     plt.hist(df["before"], bins=60, alpha=0.5, label="before victim")
     plt.hist(df["after"], bins=60, alpha=0.5, label="after victim")
@@ -27,7 +30,7 @@ def read_results(file_path, lines):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("file", type=str, help="path to the CSV file containing the results", default="test17_results.csv")
-    parser.add_argument("l", type=int, help="lines used by victim from 0 to 12")
+    parser.add_argument("l", type=int, help="lines used by victim from 0 to 12", default=1)
     args = parser.parse_args()
     read_results(args.file, args.l)
 
