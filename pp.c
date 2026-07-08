@@ -182,13 +182,13 @@ int main(void)
         memset(&results, 0, sizeof(results));
         prime();
         probe17(results.before);
-        victim(set_order[17], 10);
+        victim(set_order[17], 8);
         probe17(results.after);
         // if (results.before[0] > 500 || results.after[0] > 500)
         // {
         //     continue; // will remain 0. to filter later.
         // }
-        memcpy(&probe_times[i], &results, sizeof(test_results_t));
+        probe_times[i] = results;
     }
 
     printf("line,before,after\n");
@@ -199,6 +199,7 @@ int main(void)
             printf("%hu,%lu,%lu\n", line_order[l], (unsigned long)probe_times[i].before[line_order[l]], (unsigned long)probe_times[i].after[line_order[l]]);
         }
     }
+    free(probe_times);
 
     // printf("victim_set,victim_line_count,probe_set,count,sum_probe_time\n");
     // for (size_t victim_set = 0; victim_set < NUM_SETS; victim_set++)
