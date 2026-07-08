@@ -34,11 +34,11 @@ def read_results(file_path):
     plt.yticks(range(0, 13))
 
     plt.tight_layout()
-    plt.savefig("prime_probe_heatmap.png", dpi=200, bbox_inches="tight")
+    plt.savefig("./results/prime_probe_heatmap.png", dpi=200, bbox_inches="tight")
     plt.show()
 
 def main():
-    file_path = "results.csv"
+    file_path = "./results/results.csv"
     read_results(file_path)
 
 if __name__ == "__main__":

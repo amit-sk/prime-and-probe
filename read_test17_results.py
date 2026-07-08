@@ -23,13 +23,13 @@ def read_results(file_path, lines):
     plt.title(f"Probe time distribution: before vs after victim run with lines={lines}")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f'test_set17_lines{lines}.png')
+    plt.savefig(f'./results/test_set17_lines{lines}.png')
     plt.show()
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("file", type=str, help="path to the CSV file containing the results", default="test17_results.csv")
+    parser.add_argument("file", type=str, help="path to the CSV file containing the results", default="./results/test17_results.csv")
     parser.add_argument("l", type=int, help="lines used by victim from 0 to 12", default=1)
     args = parser.parse_args()
     read_results(args.file, args.l)
