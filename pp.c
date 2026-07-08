@@ -182,7 +182,7 @@ int main(void)
         memset(&results, 0, sizeof(results));
         prime();
         probe17(results.before);
-        victim(set_order[17], 8);
+        victim(set_order[17], 6);
         probe17(results.after);
         // if (results.before[0] > 500 || results.after[0] > 500)
         // {
