@@ -41,12 +41,13 @@ def show_histogram_of_diff(df, output_file_path, lines):
 
     xmin = data.min()
     xmax = data.max()
-    tick_gap=10
+    tick_gap=2
     plt.xticks(np.arange(tick_gap * (xmin // tick_gap), xmax + tick_gap, tick_gap), rotation=45)
 
     plt.xlabel("Probe time difference (after - before)")
     plt.ylabel("Count")
     plt.title(f"Probe time difference distribution: after minus before victim run with lines={lines}")
+    plt.text(0.98, 0.95, f"Mean: {data.mean():.2f} +- {data.std():.2f}\nMedian: {data.median():.2f}", transform=plt.gca().transAxes, ha="right", va="top", bbox=dict(boxstyle="round", facecolor="white"))
     plt.tight_layout()
     plt.savefig(output_file_path)
     # plt.show()

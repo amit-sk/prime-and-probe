@@ -247,12 +247,12 @@ int main(void)
 {
     ppinit();
 
-    prime_and_probe(REPETITIONS);
-    // for (size_t lines = 0; lines <= NUM_LINES; lines++)
-    // {
-    //     // prime_and_probe_set(REPETITIONS, 17, lines);
-    //     prime_and_probe_set_whole_set_meas(REPETITIONS, 17, lines);
-    // }
+    // prime_and_probe(REPETITIONS);
+    for (size_t lines = 0; lines <= NUM_LINES; lines++)
+    {
+        // prime_and_probe_set(REPETITIONS, 17, lines);
+        prime_and_probe_set_whole_set_meas(REPETITIONS, 17, lines);
+    }
 
     return 0;
 }
