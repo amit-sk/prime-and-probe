@@ -6,6 +6,7 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <string.h>
+#include <assert.h>
 
 #include "consts.h"
 #include "victim.h"
@@ -18,9 +19,13 @@
 #define PRIME_AND_PROBE_SET_PER_LINE_RESULTS_FILENAME ("./results/raw/results_set_per_line_%zu_lines.csv")
 
 // static volatile uint8_t buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE] __attribute__((aligned(4096))) = {0};
-static volatile uint16_t buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE / sizeof(uint16_t)] __attribute__((aligned(4096))) = {0};
-static uint16_t set_order[NUM_SETS] = {0};
-static uint16_t line_order[NUM_LINES] = {0};
+static volatile uint16_t prime_buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE / sizeof(uint16_t)] __attribute__((aligned(4096))) = {0};
+static uint16_t prime_set_order[NUM_SETS] = {0};
+static uint16_t prime_line_order[NUM_LINES] = {0};
+
+static volatile uint16_t probe_buffer[NUM_SETS * NUM_LINES * BLOCK_SIZE / sizeof(uint16_t)] __attribute__((aligned(4096))) = {0};
+static uint16_t probe_set_order[NUM_SETS] = {0};
+static uint16_t probe_line_order[NUM_LINES] = {0};
 
 #define BUFFER_NUM_ELEMS (NUM_SETS * NUM_LINES * BLOCK_SIZE / sizeof(uint16_t))
 _Static_assert(BUFFER_NUM_ELEMS <= UINT16_MAX, "uint16_t is too small to index the buffer");
@@ -35,8 +40,8 @@ typedef struct
 
 void ppinit(void)
 {    
-    init_orderings(set_order, line_order);
-    init_linked_list_structure(set_order, line_order, buffer);
+    init_linked_list_structure(prime_set_order, prime_line_order, prime_buffer);
+    init_linked_list_structure(probe_set_order, probe_line_order, probe_buffer);
     init_victim();
 
     /* provided code for ramping up CPU */
@@ -47,31 +52,33 @@ void ppinit(void)
 
 void prime(void)
 {
-    uint16_t idx = GET_BUFFER_IDX(set_order[0], line_order[0]);
+    uint16_t head = GET_BUFFER_IDX(prime_set_order[0], prime_line_order[0]);
+    uint16_t idx = head;
 
-    for (size_t s = 0; s < NUM_SETS; s++)
-    {
-        for (size_t l = 0; l < NUM_LINES; l++)
-        {
-            idx = buffer[idx];
-        }
-    }
+    do {
+        idx = prime_buffer[idx];
+        _mm_mfence();
+    } while (idx != head);
 }
 
 void probe(uint64_t result[NUM_SETS], uint64_t counts[NUM_SETS])
 {
     uint32_t dummy = 0;
-    uint16_t idx = GET_BUFFER_IDX(set_order[0], line_order[0]);  // probing all sets in the order of the permutation
+    uint16_t idx = GET_BUFFER_IDX(probe_set_order[0], probe_line_order[0]);  // probing all sets in the order of the permutation
 
     for (size_t s = 0; s < NUM_SETS; s++)
     {
-        uint16_t set = set_order[s];
+        uint16_t set = probe_set_order[s];
         uint64_t set_duration = 0;
 
         uint64_t start = __rdtscp(&dummy);
         for (size_t l = 0; l < NUM_LINES; l++)
         {
-            idx = buffer[idx];
+            // size_t debug_set = 0, debug_line = 0;
+            // get_set_and_line_from_buffer_idx(idx, &debug_set, &debug_line);
+            // assert(debug_set == set);
+
+            idx = probe_buffer[idx];  // using get_set_and_line_from_buffer_idx() I verified that the idx corresponds to the expected set
         }
         uint64_t end = __rdtscp(&dummy);
 
@@ -92,17 +99,17 @@ void probe_set(size_t set, uint64_t result[NUM_LINES])
     */
     uint64_t start = 0, end = 0, duration = 0;
     uint32_t dummy = 0;
-    uint16_t idx = GET_BUFFER_IDX(set, line_order[0]);
+    uint16_t idx = GET_BUFFER_IDX(set, probe_line_order[0]);
 
     for (size_t l = 0; l < NUM_LINES; l++)
     {
         start = __rdtscp(&dummy);
-        idx = buffer[idx];
+        idx = probe_buffer[idx];
         end = __rdtscp(&dummy);
         duration = (end - start);
         if (duration < 200)
         {
-            result[line_order[l]] = duration;
+            result[probe_line_order[l]] = duration;
         }
     }
 }
@@ -115,12 +122,16 @@ uint64_t probe_set_whole_set_meas(size_t set)
     */
     uint64_t start = 0, end = 0;
     uint32_t dummy = 0;
-    uint16_t idx = GET_BUFFER_IDX(set, line_order[0]);
+    uint16_t idx = GET_BUFFER_IDX(set, probe_line_order[0]);
 
     start = __rdtscp(&dummy);
     for (size_t l = 0; l < NUM_LINES; l++)
     {
-        idx = buffer[idx];
+        // size_t debug_set = 0, debug_line = 0;
+        // get_set_and_line_from_buffer_idx(idx, &debug_set, &debug_line);
+        // assert(debug_set == set);
+
+        idx = probe_buffer[idx];
     }
     end = __rdtscp(&dummy);
     return (end - start);
@@ -183,7 +194,7 @@ void prime_and_probe_set(size_t repetitions, size_t set, size_t lines)
     {
         for (size_t l = 0; l < NUM_LINES; l++)
         {
-            fprintf(fp, "%hu,%lu,%lu\n", line_order[l], (unsigned long)probe_times[i].before[line_order[l]], (unsigned long)probe_times[i].after[line_order[l]]);
+            fprintf(fp, "%hu,%lu,%lu\n", probe_line_order[l], (unsigned long)probe_times[i].before[probe_line_order[l]], (unsigned long)probe_times[i].after[probe_line_order[l]]);
         }
     }
     free(probe_times);
@@ -236,9 +247,9 @@ int main(void)
 {
     ppinit();
 
-    prime_and_probe(REPETITIONS);
+    // prime_and_probe(REPETITIONS);
     // prime_and_probe_set(REPETITIONS, 17, 3);
-    // prime_and_probe_set_whole_set_meas(REPETITIONS, 17, 11);
+    prime_and_probe_set_whole_set_meas(REPETITIONS, 17, 12);
 
     return 0;
 }

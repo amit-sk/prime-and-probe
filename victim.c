@@ -1,4 +1,5 @@
 #include <x86intrin.h>
+#include <assert.h>
 #include "pointer_chasing.h"
 #include "consts.h"
 #include "victim.h"
@@ -9,7 +10,6 @@ static uint16_t victim_line_order[NUM_LINES] = {0};
 
 void init_victim(void)
 {
-    init_orderings(victim_set_order, victim_line_order);
     init_linked_list_structure(victim_set_order, victim_line_order, victim_buffer);
 }
 
@@ -25,6 +25,10 @@ void victim(size_t victim_set, size_t victim_lines)
     uint16_t idx = GET_BUFFER_IDX(victim_set, victim_line_order[0]);
     for (size_t l = 0; l < victim_lines; l++)
     {
+        // size_t debug_set = 0, debug_line = 0;
+        // get_set_and_line_from_buffer_idx(idx, &debug_set, &debug_line);
+        // assert(debug_set == victim_set);
+
         idx = victim_buffer[idx];
     }
 }

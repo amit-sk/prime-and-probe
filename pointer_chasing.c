@@ -7,15 +7,21 @@
 #include "consts.h"
 #include "pointer_chasing.h"
 
-// for debugging pointer chasing
-void print_set_and_line_from_elem_index(uint16_t idx)
+void get_set_and_line_from_buffer_idx(uint16_t idx, size_t *set, size_t *line)
 {
     size_t byte_offset = (size_t)idx * sizeof(uint16_t);
 
-    size_t line = byte_offset / LINE_SEPARATION_IN_BYTES;
-    size_t rem  = byte_offset % LINE_SEPARATION_IN_BYTES;
-    size_t set  = rem / BLOCK_SIZE;
+    *line = byte_offset / LINE_SEPARATION_IN_BYTES;
+    *set = (byte_offset % LINE_SEPARATION_IN_BYTES) / BLOCK_SIZE;
+}
 
+// for debugging pointer chasing
+void print_set_and_line_from_elem_index(uint16_t idx)
+{
+    size_t set;
+    size_t line;
+
+    get_set_and_line_from_buffer_idx(idx, &set, &line);
     printf("idx=%u, set=%zu, line=%zu\n", idx, set, line);
 }
 
@@ -48,9 +54,12 @@ void init_orderings(uint16_t *set_order, uint16_t *line_order)
 void init_linked_list_structure(uint16_t *set_order, uint16_t *line_order, volatile uint16_t *buffer)
 {
     /*
-    * iterate through lines for each set in a random order, then move to the next set in a random order,
-    * according to the pre-shuffled set_order and line_order arrays 
+    * create shuffled set_order and line_order arrays, then use them to initialize the buffer as a linked list that
+    * iterates through all lines for each specific set in a random line order, then move to the next set in the random set order,
+    * according to the shuffled set_order and line_order arrays 
     */
+   init_orderings(set_order, line_order);
+
     for (uint16_t s = 0; s < NUM_SETS; s++)
     {
         uint16_t set = set_order[s];
