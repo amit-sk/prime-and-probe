@@ -17,12 +17,50 @@ def read_results(file_path, lines):
         output_file_path = os.path.join('./results', 'probe_set', f'{lines}_lines.png')
 
     df = data[['before', 'after']]
-    plt.figure(figsize=(8, 4))
-    plt.hist(df["before"], bins=60, alpha=0.5, label="before victim")
-    plt.hist(df["after"], bins=60, alpha=0.5, label="after victim")
+    if lines == 0:
+        df = df[(df['before'] > 100) & (df['after'] > 100) & (df['before'] < 200) & (df['after'] < 200)]  # where i see most of the data, filtering outliers
+    else:
+        df = df[(df['before'] > 130) & (df['after'] > 130) & (df['before'] < 170) & (df['after'] < 170)]  # where i see most of the data, filtering outliers
 
-    xmin = min(df["before"].min(), df["after"].min())
-    xmax = max(df["before"].max(), df["after"].max())
+    show_histogram_of_results(df, output_file_path, lines)
+
+    df['after-before'] = df['after'] - df['before']
+    diff_output_file_path = os.path.join('./results', 'probe_set_diff', f'{lines}_lines.png')
+    show_histogram_of_diff(df, diff_output_file_path, lines)
+
+def show_histogram_of_diff(df, output_file_path, lines):
+    if lines != 0:
+        df = df[(df['after-before'] > -20) & (df['after-before'] < 20)]  # where i see most of the data, filtering outliers
+
+    data = df['after-before']
+
+    bin_size = 1
+    bins = np.arange(data.min(), data.max() + bin_size, bin_size)
+    plt.figure(figsize=(8, 4))
+    plt.hist(data, bins=bins, alpha=0.5)
+
+    xmin = data.min()
+    xmax = data.max()
+    tick_gap=10
+    plt.xticks(np.arange(tick_gap * (xmin // tick_gap), xmax + tick_gap, tick_gap), rotation=45)
+
+    plt.xlabel("Probe time difference (after - before)")
+    plt.ylabel("Count")
+    plt.title(f"Probe time difference distribution: after minus before victim run with lines={lines}")
+    plt.tight_layout()
+    plt.savefig(output_file_path)
+    # plt.show()
+
+
+def show_histogram_of_results(df, output_file_path, lines):
+    bin_size = 1
+    bins = np.arange(df.min().min(), df.max().max() + bin_size, bin_size)
+    plt.figure(figsize=(8, 4))
+    plt.hist(df["before"], bins=bins, alpha=0.5, label="before victim")
+    plt.hist(df["after"], bins=bins, alpha=0.5, label="after victim")
+
+    xmin = df.min().min()
+    xmax = df.max().max()
     tick_gap=10
     plt.xticks(np.arange(tick_gap * (xmin // tick_gap), xmax + tick_gap, tick_gap), rotation=45)
 

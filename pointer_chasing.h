@@ -6,3 +6,4 @@
 void get_set_and_line_from_buffer_idx(uint16_t idx, size_t *set, size_t *line);
 void print_set_and_line_from_elem_index(uint16_t idx);
 void init_linked_list_structure(uint16_t *set_order, uint16_t *line_order, volatile uint16_t *buffer);
+void init_opposite_linked_list_structure(uint16_t *src_set_order, uint16_t *src_line_order, volatile uint16_t *source_buffer, uint16_t *dest_set_order, uint16_t *line_order, volatile uint16_t *dest_buffer);

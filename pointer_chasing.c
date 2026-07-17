@@ -79,3 +79,32 @@ void init_linked_list_structure(uint16_t *set_order, uint16_t *line_order, volat
         }
     }
 }
+
+void create_opposite_linked_list_structure(volatile uint16_t *source_buffer, volatile uint16_t *dest_buffer)
+{
+    uint16_t head = GET_BUFFER_IDX(0, 0);
+    uint16_t src_idx = GET_BUFFER_IDX(0, 0);
+
+    do {
+        uint16_t next_idx = source_buffer[src_idx];
+        dest_buffer[next_idx] = src_idx;
+        src_idx = next_idx;
+    } while (src_idx != head);
+}
+
+void init_opposite_linked_list_structure(uint16_t *src_set_order, uint16_t *src_line_order, volatile uint16_t *source_buffer, uint16_t *dest_set_order, uint16_t *line_order, volatile uint16_t *dest_buffer)
+{
+    /*
+    * create a linked list in dest_buffer that is the opposite of the linked list in source_buffer
+    * creating also the set_order and line_order arrays for the dest_buffer linked list
+    */
+    create_opposite_linked_list_structure(source_buffer, dest_buffer);
+    for (size_t i = 0; i < NUM_SETS; i++)
+    {
+        dest_set_order[i] = src_set_order[NUM_SETS - 1 - i];
+    }
+    for (size_t i = 0; i < NUM_LINES; i++)
+    {
+        line_order[i] = src_line_order[NUM_LINES - 1 - i];
+    }
+}

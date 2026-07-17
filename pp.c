@@ -41,7 +41,7 @@ typedef struct
 void ppinit(void)
 {    
     init_linked_list_structure(prime_set_order, prime_line_order, prime_buffer);
-    init_linked_list_structure(probe_set_order, probe_line_order, probe_buffer);
+    init_opposite_linked_list_structure(prime_set_order, prime_line_order, prime_buffer, probe_set_order, probe_line_order, probe_buffer);
     init_victim();
 
     /* provided code for ramping up CPU */
@@ -220,10 +220,10 @@ void prime_and_probe_set_whole_set_meas(size_t repetitions, size_t set, size_t l
         victim(set, lines);
         results.after = probe_set_whole_set_meas(set);
 
-        if (results.before > 300 || results.after > 300)
-        {
-            continue; // will remain 0. to filter later.
-        }
+        // if (results.before > 300 || results.after > 300)
+        // {
+        //     continue; // will remain 0. to filter later.
+        // }
         probe_times[i] = results;
     }
 
@@ -247,9 +247,12 @@ int main(void)
 {
     ppinit();
 
-    // prime_and_probe(REPETITIONS);
-    // prime_and_probe_set(REPETITIONS, 17, 3);
-    prime_and_probe_set_whole_set_meas(REPETITIONS, 17, 12);
+    prime_and_probe(REPETITIONS);
+    // for (size_t lines = 0; lines <= NUM_LINES; lines++)
+    // {
+    //     // prime_and_probe_set(REPETITIONS, 17, lines);
+    //     prime_and_probe_set_whole_set_meas(REPETITIONS, 17, lines);
+    // }
 
     return 0;
 }
