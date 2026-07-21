@@ -13,7 +13,7 @@
 #include "victim.h"
 #include "pointer_chasing.h"
 
-#define REPETITIONS (2000000)
+#define REPETITIONS (1000000)
 
 #define PRIME_AND_PROBE_RESULTS_FILENAME ("./results/raw/results.csv")
 #define PRIME_AND_PROBE_SET_RESULTS_FILENAME ("./results/raw/results_set_%zu_lines.csv")
@@ -37,6 +37,13 @@ typedef struct
     uint64_t before[NUM_LINES];
     uint64_t after[NUM_LINES];
 } test_results_t;
+
+typedef struct
+{
+    size_t victim_set;
+    size_t victim_line_count;
+    uint64_t probe[NUM_SETS];
+} probe_results_t;
 
 void ppinit(void)
 {    
@@ -62,7 +69,7 @@ void prime(void)
     } while (idx != head);
 }
 
-void probe(uint64_t result[NUM_SETS], uint64_t counts[NUM_SETS])
+void probe(uint64_t result[NUM_SETS])
 {
     uint32_t dummy = 0;
     uint16_t idx = GET_BUFFER_IDX(probe_set_order[0], probe_line_order[0]);  // probing all sets in the order of the permutation
@@ -70,7 +77,6 @@ void probe(uint64_t result[NUM_SETS], uint64_t counts[NUM_SETS])
     for (size_t s = 0; s < NUM_SETS; s++)
     {
         uint16_t set = probe_set_order[s];
-        uint64_t set_duration = 0;
 
         uint64_t start = __rdtscp(&dummy);
         for (size_t l = 0; l < NUM_LINES; l++)
@@ -82,13 +88,7 @@ void probe(uint64_t result[NUM_SETS], uint64_t counts[NUM_SETS])
             idx = probe_buffer[idx];  // using get_set_and_line_from_buffer_idx() I verified that the idx corresponds to the expected set
         }
         uint64_t end = __rdtscp(&dummy);
-
-        set_duration = (end - start);
-        if (set_duration < 300)  // appears to be way above reasonable
-        {
-            result[set] += set_duration;  // summing probe time for all lines in the set
-            counts[set]++;  // to later calculate the average probe time for the set
-        }
+        result[set] = (end - start);
     }
 }
 
@@ -140,31 +140,34 @@ uint64_t probe_set_whole_set_meas(size_t set)
 
 void prime_and_probe(size_t repetitions)
 {
-    uint64_t sum_results[NUM_SETS][VICTIM_NUM_LINES_OPTIONS][NUM_SETS] = {{{0}}};  // sum of probe times for each set, given victim set and line
-    uint64_t count_results[NUM_SETS][VICTIM_NUM_LINES_OPTIONS][NUM_SETS] = {{{0}}};  // count of accepted (non-outlier) values for each victim set and line randomly chosen
+    probe_results_t result = {0};
+    probe_results_t *probe_times = calloc(repetitions, sizeof(probe_results_t));
 
     for (size_t i = 0; i < repetitions; i++)
     {
-        prime();
         size_t victim_set = rand() % NUM_SETS;
         size_t victim_line_count = rand() % VICTIM_NUM_LINES_OPTIONS;
+
+        prime();
         victim(victim_set, victim_line_count);
-        probe(&sum_results[victim_set][victim_line_count][0], &count_results[victim_set][victim_line_count][0]);
+        probe(result.probe);
+
+        result.victim_set = victim_set;
+        result.victim_line_count = victim_line_count;
+        probe_times[i] = result;
     }
 
     FILE *fp = fopen(PRIME_AND_PROBE_RESULTS_FILENAME, "w");
-    fprintf(fp, "victim_set,victim_line_count,probe_set,count,sum_probe_time\n");
-    for (size_t victim_set = 0; victim_set < NUM_SETS; victim_set++)
+    fprintf(fp, "victim_set,victim_line_count,probe_set,probe_time\n");
+    for (size_t i = 0; i < repetitions; i++)
     {
-        for (size_t victim_line_count = 0; victim_line_count < VICTIM_NUM_LINES_OPTIONS; victim_line_count++)
+        for (size_t set = 0; set < NUM_SETS; set++)
         {
-            for (size_t set = 0; set < NUM_SETS; set++)
-            {
-                fprintf(fp, "%zu,%zu,%zu,%zu,%zu\n", victim_set, victim_line_count, set, count_results[victim_set][victim_line_count][set], sum_results[victim_set][victim_line_count][set]);
-            }
+            fprintf(fp, "%zu,%zu,%zu,%zu\n", probe_times[i].victim_set, probe_times[i].victim_line_count, set, probe_times[i].probe[set]);
         }
     }
     fclose(fp);
+    free(probe_times);
 }
 
 void prime_and_probe_set(size_t repetitions, size_t set, size_t lines)
@@ -248,12 +251,12 @@ int main(void)
 {
     ppinit();
 
-    // prime_and_probe(REPETITIONS);
-    for (size_t lines = 0; lines <= NUM_LINES; lines++)
-    {
-        // prime_and_probe_set(REPETITIONS, 17, lines);
-        prime_and_probe_set_whole_set_meas(REPETITIONS, 17, lines);
-    }
+    prime_and_probe(REPETITIONS);
+    // for (size_t lines = 0; lines <= NUM_LINES; lines++)
+    // {
+    //     // prime_and_probe_set(REPETITIONS, 17, lines);
+    //     prime_and_probe_set_whole_set_meas(REPETITIONS, 17, lines);
+    // }
 
     return 0;
 }
