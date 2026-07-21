@@ -7,12 +7,13 @@
 #include <limits.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 
 #include "consts.h"
 #include "victim.h"
 #include "pointer_chasing.h"
 
-#define REPETITIONS (1000000)
+#define REPETITIONS (2000000)
 
 #define PRIME_AND_PROBE_RESULTS_FILENAME ("./results/raw/results.csv")
 #define PRIME_AND_PROBE_SET_RESULTS_FILENAME ("./results/raw/results_set_%zu_lines.csv")
@@ -36,7 +37,6 @@ typedef struct
     uint64_t before[NUM_LINES];
     uint64_t after[NUM_LINES];
 } test_results_t;
-
 
 void ppinit(void)
 {    
@@ -83,7 +83,7 @@ void probe(uint64_t result[NUM_SETS], uint64_t counts[NUM_SETS])
         uint64_t end = __rdtscp(&dummy);
 
         set_duration = (end - start);
-        if (set_duration < 1500)  // appears to be way above reasonable
+        if (set_duration < 300)  // appears to be way above reasonable
         {
             result[set] += set_duration;  // summing probe time for all lines in the set
             counts[set]++;  // to later calculate the average probe time for the set

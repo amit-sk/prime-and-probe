@@ -17,10 +17,13 @@ def read_results(file_path, lines):
         output_file_path = os.path.join('./results', 'probe_set', f'{lines}_lines.png')
 
     df = data[['before', 'after']]
-    if lines == 0:
-        df = df[(df['before'] > 100) & (df['after'] > 100) & (df['before'] < 200) & (df['after'] < 200)]  # where i see most of the data, filtering outliers
-    else:
-        df = df[(df['before'] > 130) & (df['after'] > 130) & (df['before'] < 170) & (df['after'] < 170)]  # where i see most of the data, filtering outliers
+    bottom = df.quantile(0.1)
+    top = df.quantile(0.9)
+    df = df[
+        df['before'].between(bottom['before'], top['before'], inclusive='both') &
+        df['after'].between(bottom['after'], top['after'], inclusive='both')
+    ]
+    # import ipdb; ipdb.set_trace()
 
     show_histogram_of_results(df, output_file_path, lines)
 
