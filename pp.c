@@ -219,14 +219,19 @@ void prime_and_probe_set_whole_set_meas(size_t repetitions, size_t set, size_t l
 {
     struct probe_set_whole_set_meas_results results = {0};
     struct probe_set_whole_set_meas_results *probe_times = calloc(repetitions, sizeof(results));
+    size_t before = 0, after = 0;
 
     for (size_t i = 0; i < repetitions; i++)
     {
         memset(&results, 0, sizeof(results));
         prime();
-        results.before = probe_set_whole_set_meas(set);
+        before = probe_set_whole_set_meas(set);
         victim(set, lines);
-        results.after = probe_set_whole_set_meas(set);
+        after = probe_set_whole_set_meas(set);
+
+        _mm_mfence();
+        results.before = before;
+        results.after = after;
 
         // if (results.before > 300 || results.after > 300)
         // {

@@ -58,3 +58,6 @@ dkms.conf
 # ignore binaries
 pp
 test_flush_cache
+
+# raw results (large files)
+results/raw/

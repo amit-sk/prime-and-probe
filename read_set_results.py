@@ -40,7 +40,7 @@ def show_histogram_of_diff(df, output_file_path, lines, show=False):
 
     xmin = data.min()
     xmax = data.max()
-    tick_gap=10
+    tick_gap = 1 if xmax - xmin <= 20 else 10
     plt.xticks(np.arange(tick_gap * (xmin // tick_gap), xmax + tick_gap, tick_gap), rotation=45)
 
     plt.xlabel("Probe time difference (after - before)")
