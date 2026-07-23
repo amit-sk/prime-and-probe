@@ -3,19 +3,28 @@ import matplotlib.pyplot as plt
 
 def read_results(file_path):
     df = pd.read_csv(file_path)
-    df['avg'] = df['sum_probe_time'] / df['count']
 
     # only need results for when the probed set == the victim set
     results = df[df['probe_set'] == df['victim_set']]
-    results = results[['victim_set', 'victim_line_count', 'avg']].reset_index(drop=True)
+    results = results[['victim_set', 'victim_line_count', 'probe_time']].reset_index(drop=True)
 
-    heatmap_data = results.pivot(
+    bottom = results["probe_time"].quantile(0.05)
+    top = results["probe_time"].quantile(0.95)
+
+    results_filtered = results[
+        (results["probe_time"] >= bottom) &
+        (results["probe_time"] <= top)
+    ]
+
+    avg_results = (results_filtered.groupby(["victim_line_count", "victim_set"], as_index=False)["probe_time"] .mean())
+
+    heatmap_data = avg_results.pivot(
         index="victim_line_count",
         columns="victim_set",
-        values="avg",
+        values="probe_time",
     )
-    # vmin = results["avg"].quantile(0.05)
-    # vmax = results["avg"].quantile(0.95)
+    # vmin = results["probe_time"].quantile(0.05)
+    # vmax = results["probe_time"].quantile(0.95)
     plt.figure(figsize=(12, 4))
     plt.imshow(
         heatmap_data,

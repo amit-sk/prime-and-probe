@@ -7,7 +7,7 @@ import re
 
 LINES_PATTERN = r"(\d+)_lines"
 
-def read_results(file_path, lines):
+def read_results(file_path, lines, show=False):
     data = pd.read_csv(file_path)
     if 'line' in data.columns:
         # measured per line access, not entire set
@@ -17,10 +17,12 @@ def read_results(file_path, lines):
         output_file_path = os.path.join('./results', 'probe_set', f'{lines}_lines.png')
 
     df = data[['before', 'after']]
-    if lines == 0:
-        df = df[(df['before'] > 100) & (df['after'] > 100) & (df['before'] < 200) & (df['after'] < 200)]  # where i see most of the data, filtering outliers
-    else:
-        df = df[(df['before'] > 130) & (df['after'] > 130) & (df['before'] < 170) & (df['after'] < 170)]  # where i see most of the data, filtering outliers
+    bottom = df.quantile(0.1)
+    top = df.quantile(0.9)
+    df = df[
+        df['before'].between(bottom['before'], top['before'], inclusive='both') &
+        df['after'].between(bottom['after'], top['after'], inclusive='both')
+    ]
 
     show_histogram_of_results(df, output_file_path, lines)
 
@@ -28,10 +30,7 @@ def read_results(file_path, lines):
     diff_output_file_path = os.path.join('./results', 'probe_set_diff', f'{lines}_lines.png')
     show_histogram_of_diff(df, diff_output_file_path, lines)
 
-def show_histogram_of_diff(df, output_file_path, lines):
-    if lines != 0:
-        df = df[(df['after-before'] > -20) & (df['after-before'] < 20)]  # where i see most of the data, filtering outliers
-
+def show_histogram_of_diff(df, output_file_path, lines, show=False):
     data = df['after-before']
 
     bin_size = 1
@@ -41,7 +40,7 @@ def show_histogram_of_diff(df, output_file_path, lines):
 
     xmin = data.min()
     xmax = data.max()
-    tick_gap=2
+    tick_gap = 1 if xmax - xmin <= 20 else 10
     plt.xticks(np.arange(tick_gap * (xmin // tick_gap), xmax + tick_gap, tick_gap), rotation=45)
 
     plt.xlabel("Probe time difference (after - before)")
@@ -50,10 +49,11 @@ def show_histogram_of_diff(df, output_file_path, lines):
     plt.text(0.98, 0.95, f"Mean: {data.mean():.2f} +- {data.std():.2f}\nMedian: {data.median():.2f}", transform=plt.gca().transAxes, ha="right", va="top", bbox=dict(boxstyle="round", facecolor="white"))
     plt.tight_layout()
     plt.savefig(output_file_path)
-    # plt.show()
+    if show:
+        plt.show()
 
 
-def show_histogram_of_results(df, output_file_path, lines):
+def show_histogram_of_results(df, output_file_path, lines, show=False):
     bin_size = 1
     bins = np.arange(df.min().min(), df.max().max() + bin_size, bin_size)
     plt.figure(figsize=(8, 4))
@@ -71,16 +71,18 @@ def show_histogram_of_results(df, output_file_path, lines):
     plt.legend()
     plt.tight_layout()
     plt.savefig(output_file_path)
-    # plt.show()
+    if show:
+        plt.show()
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("file", type=str, help="path to the CSV file containing the results")
+    parser.add_argument("--show", action="store_true", help="display the plots", default=False)
     args = parser.parse_args()
 
     lines = int(re.search(LINES_PATTERN, args.file).group(1))
-    read_results(args.file, lines)
+    read_results(args.file, lines, show=args.show)
 
 if __name__ == "__main__":
     main()
