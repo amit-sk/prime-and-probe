@@ -13,6 +13,7 @@
 #include "consts.h"
 #include "victim.h"
 #include "pointer_chasing.h"
+#include "pp.h"
 
 #define REPETITIONS (1000000)
 
@@ -57,9 +58,6 @@ void ppinit(void)
 
 void prime(void)
 {
-    /*
-     * primes all sets in the order of the permutation, by following the linked list structure backwards.
-    */
     uint16_t head = GET_BUFFER_IDX(set_order[0], line_order[0]);
     uint16_t idx = head;
 
@@ -71,10 +69,6 @@ void prime(void)
 
 void probe(uint64_t result[NUM_SETS])
 {
-    /*
-     * probes all sets in the order of the permutation, by following the linked list structure forwards.
-     * the time taken to probe each set is recorded in the result array.
-    */
     uint32_t dummy = 0;
     uint16_t idx = GET_BUFFER_IDX(set_order[0], line_order[0]);  // probing all sets in the order of the permutation
 
@@ -96,13 +90,8 @@ void probe(uint64_t result[NUM_SETS])
     }
 }
 
-void probe_set(size_t set, uint64_t result[NUM_LINES])
+void probe_set_per_line(size_t set, uint64_t result[NUM_LINES])
 {
-    /* 
-        probes a single set, without using set permutations (i.e. `set` points to the actual set index to be accessed).
-        lines order is determined by the `line_order` array, which is a permutation of the lines in the set.
-        measurements are done for each line in the set, and returned in the result array.
-    */
     uint64_t start = 0, end = 0, duration = 0;
     uint32_t dummy = 0;
     uint16_t idx = GET_BUFFER_IDX(set, line_order[0]);
@@ -120,13 +109,8 @@ void probe_set(size_t set, uint64_t result[NUM_LINES])
     }
 }
 
-uint64_t probe_set_whole_set_meas(size_t set)
+uint64_t probe_set(size_t set)
 {
-    /*
-        probes a single set, without using set permutations (i.e. `set` points to the actual set index to be accessed).
-        lines order is determined by the `line_order` array, which is a permutation of the lines in the set.
-        measurements are done for the entire set, and the total time is returned.
-    */
     uint64_t start = 0, end = 0;
     uint32_t dummy = 0;
     uint16_t idx = GET_BUFFER_IDX(set, line_order[0]);
@@ -178,7 +162,7 @@ void prime_and_probe(size_t repetitions)
     free(probe_times);
 }
 
-void prime_and_probe_set(size_t repetitions, size_t set, size_t lines)
+void prime_and_probe_set_per_line(size_t repetitions, size_t set, size_t lines)
 {
     probe_per_line_results_t results = {0};
     probe_per_line_results_t *probe_times = calloc(repetitions, sizeof(probe_per_line_results_t));
@@ -187,9 +171,9 @@ void prime_and_probe_set(size_t repetitions, size_t set, size_t lines)
     {
         memset(&results, 0, sizeof(results));
         prime();
-        probe_set(set, results.before);
+        probe_set_per_line(set, results.before);
         victim(set, lines);
-        probe_set(set, results.after);
+        probe_set_per_line(set, results.after);
         // if (results.before[0] > 500 || results.after[0] > 500)
         // {
         //     continue; // will remain 0. to filter later.
@@ -214,25 +198,25 @@ void prime_and_probe_set(size_t repetitions, size_t set, size_t lines)
     fclose(fp);
 }
 
-struct probe_set_whole_set_meas_results
+typedef struct
 {
     uint64_t before;
     uint64_t after;
-};
+} probe_set_results_t;
 
-void prime_and_probe_set_whole_set_meas(size_t repetitions, size_t set, size_t lines)
+void prime_and_probe_set(size_t repetitions, size_t set, size_t lines)
 {
-    struct probe_set_whole_set_meas_results results = {0};
-    struct probe_set_whole_set_meas_results *probe_times = calloc(repetitions, sizeof(results));
+    probe_set_results_t results = {0};
+    probe_set_results_t *probe_times = calloc(repetitions, sizeof(results));
     size_t before = 0, after = 0;
 
     for (size_t i = 0; i < repetitions; i++)
     {
         memset(&results, 0, sizeof(results));
         prime();
-        before = probe_set_whole_set_meas(set);
+        before = probe_set(set);
         victim(set, lines);
-        after = probe_set_whole_set_meas(set);
+        after = probe_set(set);
 
         _mm_mfence();
         results.before = before;
@@ -269,12 +253,12 @@ int main(void)
 
     ppinit();
 
-    // prime_and_probe(REPETITIONS);
-    for (size_t lines = 0; lines <= NUM_LINES; lines++)
-    {
-        // prime_and_probe_set(REPETITIONS, 17, lines);
-        prime_and_probe_set_whole_set_meas(REPETITIONS, 17, lines);
-    }
+    prime_and_probe(REPETITIONS);
+    // for (size_t lines = 0; lines <= NUM_LINES; lines++)
+    // {
+    //     // prime_and_probe_set_per_line(REPETITIONS, 17, lines);
+    //     prime_and_probe_set(REPETITIONS, 17, lines);
+    // }
 
     return 0;
 }
