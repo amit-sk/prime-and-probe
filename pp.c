@@ -7,6 +7,8 @@
 #include <limits.h>
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
+#include <sys/stat.h>
 
 #include "consts.h"
 #include "victim.h"
@@ -146,6 +148,7 @@ void prime_and_probe(size_t repetitions)
 {
     probe_results_t result = {0};
     probe_results_t *probe_times = calloc(repetitions, sizeof(probe_results_t));
+    assert(probe_times != NULL);
 
     for (size_t i = 0; i < repetitions; i++)
     {
@@ -162,6 +165,7 @@ void prime_and_probe(size_t repetitions)
     }
 
     FILE *fp = fopen(PRIME_AND_PROBE_RESULTS_FILENAME, "w");
+    assert(fp != NULL);
     fprintf(fp, "victim_set,victim_line_count,probe_set,probe_time\n");
     for (size_t i = 0; i < repetitions; i++)
     {
@@ -197,6 +201,7 @@ void prime_and_probe_set(size_t repetitions, size_t set, size_t lines)
     snprintf(filename, sizeof(filename), PRIME_AND_PROBE_SET_PER_LINE_RESULTS_FILENAME, lines);
     printf("%s\n", filename);
     FILE *fp = fopen(filename, "w");
+    assert(fp != NULL);
     fprintf(fp, "line,before,after\n");
     for (size_t i = 0; i < repetitions; i++)
     {
@@ -244,6 +249,7 @@ void prime_and_probe_set_whole_set_meas(size_t repetitions, size_t set, size_t l
     snprintf(filename, sizeof(filename), PRIME_AND_PROBE_SET_RESULTS_FILENAME, lines);
     printf("%s\n", filename);
     FILE *fp = fopen(filename, "w");
+    assert(fp != NULL);
     fprintf(fp, "before,after\n");
     for (size_t i = 0; i < repetitions; i++)
     {
@@ -258,6 +264,9 @@ void prime_and_probe_set_whole_set_meas(size_t repetitions, size_t set, size_t l
 
 int main(void)
 {
+    assert(mkdir("./results", 0755) == 0 || errno == EEXIST);
+    assert(mkdir("./results/raw", 0755) == 0 || errno == EEXIST);
+
     ppinit();
 
     // prime_and_probe(REPETITIONS);
