@@ -13,7 +13,7 @@ int tobinary(const char *data, aes_t aes);
 void tostring(const aes_t aes, char text[AESSIZE * 2 + 1]);
 
 /* Generate a random 16-byte plaintext. */
-void randaes(aes_t aes);
+void rand_aes_plaintext(aes_t aes);
 
 /*
  * Parse a string as an unsigned long long integer (for argv parsing).

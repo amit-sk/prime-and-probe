@@ -35,7 +35,7 @@ void tostring(const aes_t aes, char text[AESSIZE * 2 + 1])
         sprintf(text + 2 * i, "%02x", aes[i]);
 }
 
-void randaes(aes_t aes)
+void rand_aes_plaintext(aes_t aes)
 {
     for (int i = 0; i < AESSIZE; ++i) {
         aes[i] = (uint8_t)(rand() & 0xff);
