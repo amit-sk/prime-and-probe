@@ -1,5 +1,6 @@
+Undergraduate's project in micro-architectural attacks and weird gates.
+
 # Prime+Probe
-As part of an undergraduate's project in micro-architectural attacks and weird gates.
 
 ## Compiling and Running
 Compiling:
@@ -52,7 +53,7 @@ make pp && for f in `taskset -c 0 ./pp`; do python ./read_set_results.py $f; don
 
 The program generates `n` random plaintexts, and encrypts them while performing Prime+Probe, measuring the access time to each set after encryption. 
 
-## Compile and Running
+## Compiling and Running
 
 Compile:
 
