@@ -4,17 +4,23 @@ As part of an undergraduate's project in micro-architectural attacks and weird g
 ## Compiling and Running
 Compiling:
 
-`make pp`
+```bash
+make pp
+```
 
 Running:
 
-`taskset -c 0 ./pp`
+```bash
+taskset -c 0 ./pp
+```
 
 (Assuming core 0 has a L1 cache with specifications fitting to those in consts.h)
 
 Analyzing results:
 
-`python ./read_results.py`
+```bash
+python ./read_results.py
+```
 
 All in one:
 
@@ -39,3 +45,27 @@ make pp && for f in `taskset -c 0 ./pp`; do python ./read_set_results.py $f; don
 ```
 
 (Still assuming core 0 has a L1 cache with specifications fitting to those in consts.h)
+
+# AES attack
+
+## Run AES to get measurements
+
+The program generates `n` random plaintexts, and encrypts them while performing Prime+Probe, measuring the access time to each set after encryption. 
+
+## Compile and Running
+
+Compile:
+
+```bash
+make aes_pp
+```
+
+Args: a 32-digit hexadecimal number that represents an AES `key`, and a number of encryptions `n`. 
+
+Example:
+
+```bash
+./aes_pp 00112233445566778899aabbccddeeff 1000
+```
+
+The measurements are saved to `./results/raw/aes_results.csv`. The file will contain `n` entries, with the plaintext, ciphertext and measurements collected for each set.
