@@ -22,7 +22,7 @@ Expects the raw results to be in `./results/raw/results.csv` (very large file). 
 
 Work on a single set. For i=0,...,NUM_LINES: Prime it, run victim with lines=i, probe.
 
-Compiling and running like above will save raw results to `./results/raw/results_set_$i_lines.csv`, and print the file name for each $i as it does. 
+To switch to this instead of full P+P: in `pp.c` in `main`, comment out call to `prime_and_probe` and comment in the for loop. Compiling and running like above will save raw results to `./results/raw/results_set_$i_lines.csv`, and print the file name for each $i as it does. 
 
 Analyzing results using: `python ./read_set_results <results_file_name>`. Results will include histogram of probe times before and after victim, in `./results/probe_set/$i_lines.png`, and histogram of diff between after minus before times, in `./results/probe_set_diff`.
 
