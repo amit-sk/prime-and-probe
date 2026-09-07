@@ -97,6 +97,11 @@ def run_correlation(df, ciphertext_byte_index):
 
     ci = df['ciphertext'].str[ciphertext_byte_index*2:(ciphertext_byte_index*2)+2].apply(lambda x: int(x, 16)).to_numpy() # get byte at index ciphertext_byte_index
 
+    cache_line_size = 64  # bytes
+    table_entry_size = 4  # bytes
+    table_cache_lines_count = INV_SBOX.size // cache_line_size
+    entries_per_cache_line = cache_line_size // table_entry_size
+
     results = []
     for byte_value in range(256):
         # State index after inverse S-box
@@ -104,10 +109,10 @@ def run_correlation(df, ciphertext_byte_index):
 
         # Relative cache line offset in table
         # 256-entry, 1024-byte t-table spans 16 cache lines (with block size 64 bytes), with 16 entries per line
-        relative_cache_line = state_index // 16
+        relative_cache_line = state_index // entries_per_cache_line
 
         # calculating correlation between relative lines and probe times for this byte value
-        X = (relative_cache_line[:, None] == np.arange(16)).astype(np.float64)  # One-hot encoding of relative cache line
+        X = (relative_cache_line[:, None] == np.arange(table_cache_lines_count)).astype(np.float64)  # One-hot encoding of relative cache line
         mean_X = np.mean(X, axis=0, keepdims=True)
         std_X = np.std(X, axis=0, keepdims=True)
 
@@ -117,7 +122,7 @@ def run_correlation(df, ciphertext_byte_index):
 
         # for each possible set the table starts in 
         for table_start_set in range(num_sets):
-            relative_line_indices = np.arange(16)
+            relative_line_indices = np.arange(table_cache_lines_count)
             set_indices = (table_start_set + relative_line_indices) % num_sets  # which sets the relative cache lines map to
             total_score = np.sum(M[relative_line_indices, set_indices])
             results.append({
