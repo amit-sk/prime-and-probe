@@ -1,4 +1,5 @@
 import pandas as pd
+import polars as pl
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -49,12 +50,26 @@ SBOX = [
 RCON = [0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36]
 
 
+def _read_aes_pp_results(file_path):
+    with open(file_path, 'r') as f:
+        header = f.readline().strip().split(',')
+        cache_sets_count = max(int(col.strip('probe_set_')) for col in header if col.startswith('probe_set_')) + 1
+
+    probe_columns = [f"probe_set_{i}" for i in range(cache_sets_count)]
+    return pl.read_csv(
+        file_path,
+        columns=["ciphertext", *probe_columns],
+        schema_overrides={column: pl.UInt32 for column in probe_columns},
+    )
+
+
 def read_results(file_path):
-    df = pd.read_csv(file_path)
+    df = _read_aes_pp_results(file_path)
+    prepared_data = _prepare_correlation_data(df)
     total_results = []
     for i in range(CIPHER_TEXT_SIZE):
         print(f'Running correlation for ciphertext byte index {i}...')
-        results = run_correlation(df, i).sort_values(by='score', ascending=False)
+        results = run_correlation(df, i, prepared_data=prepared_data).sort_values(by='score', ascending=False)
         total_results.append({
             'ciphertext_index': i,
             'key_hex': results.iloc[0]['key_hex'],
@@ -84,45 +99,85 @@ def read_results(file_path):
         print(' '.join(f'{b:02X}' for b in k0_bytes))
 
 
-def run_correlation(df, ciphertext_byte_index):
-    num_sets = df.columns.str.startswith('probe_set_').sum()
-    Y = df[df.columns[df.columns.str.startswith('probe_set_')]].to_numpy(dtype=np.float64)
-    lower = np.quantile(Y, 0.05, axis=0)
-    upper = np.quantile(Y, 0.95, axis=0)
-    Y_filtered = np.clip(Y, lower, upper)
+def _prepare_correlation_data(df):
+    probe_columns = [column for column in df.columns if column.startswith('probe_set_')]
+    num_sets = len(probe_columns)
+    lower = df.select([
+        pl.col(column).quantile(0.05, interpolation='nearest').alias(column)
+        for column in probe_columns
+    ]).row(0)
+    upper = df.select([
+        pl.col(column).quantile(0.95, interpolation='nearest').alias(column)
+        for column in probe_columns
+    ]).row(0)
+    clipped = df.with_columns([
+        pl.col(column).clip(lower[index], upper[index]).alias(column)
+        for index, column in enumerate(probe_columns)
+    ])
 
-    N = len(Y_filtered)
-    mean_Y = np.mean(Y_filtered, axis=0, keepdims=True)
-    std_Y = np.std(Y_filtered, axis=0, keepdims=True)
+    statistics = clipped.select(
+        [pl.col(column).mean().alias(f'mean_{column}') for column in probe_columns]
+        + [pl.col(column).std(ddof=0).alias(f'std_{column}') for column in probe_columns]
+    ).row(0)
+    mean_Y = np.asarray(statistics[:num_sets], dtype=np.float64)[None, :]
+    std_Y = np.asarray(statistics[num_sets:], dtype=np.float64)[None, :]
 
-    ci = df['ciphertext'].str[ciphertext_byte_index*2:(ciphertext_byte_index*2)+2].apply(lambda x: int(x, 16)).to_numpy() # get byte at index ciphertext_byte_index
+    byte_counts = np.empty((CIPHER_TEXT_SIZE, 256), dtype=np.int64)
+    byte_sums = np.empty((CIPHER_TEXT_SIZE, 256, num_sets), dtype=np.float64)
+    for byte_index in range(CIPHER_TEXT_SIZE):
+        grouped = clipped.with_columns(
+            pl.col('ciphertext').str.slice(byte_index * 2, 2)
+            .str.to_integer(base=16).alias('cipher_byte')
+        ).group_by('cipher_byte').agg(
+            [pl.len().alias('count')]
+            + [pl.col(column).sum().alias(column) for column in probe_columns]
+        ).sort('cipher_byte')
+        byte_counts[byte_index] = grouped['count'].to_numpy()
+        byte_sums[byte_index] = grouped.select(probe_columns).to_numpy().astype(
+            np.float64, copy=False
+        )
+
+    return mean_Y, std_Y, byte_counts, byte_sums, num_sets
+
+
+def run_correlation(df, ciphertext_byte_index, prepared_data=None):
+    if prepared_data is None:
+        prepared_data = _prepare_correlation_data(df)
+
+    mean_Y, std_Y, byte_counts, byte_sums, num_sets = prepared_data
+    counts_by_value = byte_counts[ciphertext_byte_index]
+    sums_by_value = byte_sums[ciphertext_byte_index]
+    N = counts_by_value.sum()
 
     cache_line_size = 64  # bytes
     table_entry_size = 4  # bytes
-    table_cache_lines_count = INV_SBOX.size // cache_line_size
+    table_cache_lines_count = INV_SBOX.size * table_entry_size // cache_line_size
     entries_per_cache_line = cache_line_size // table_entry_size
+
+    cipher_values = np.arange(256, dtype=np.uint8)
+    line_by_key_and_value = INV_SBOX[np.bitwise_xor(
+        np.arange(256, dtype=np.uint8)[:, None], cipher_values[None, :]
+    )] // entries_per_cache_line
 
     results = []
     for byte_value in range(256):
-        # State index after inverse S-box
-        state_index = INV_SBOX[ci ^ byte_value]
+        line_by_value = line_by_key_and_value[byte_value]
+        counts = np.bincount(
+            line_by_value, weights=counts_by_value, minlength=table_cache_lines_count
+        )
+        sums = np.empty((table_cache_lines_count, num_sets), dtype=np.float64)
+        for relative_line in range(table_cache_lines_count):
+            sums[relative_line] = sums_by_value[line_by_value == relative_line].sum(axis=0)
 
-        # Relative cache line offset in table
-        # 256-entry, 1024-byte t-table spans 16 cache lines (with block size 64 bytes), with 16 entries per line
-        relative_cache_line = state_index // entries_per_cache_line
-
-        # calculating correlation between relative lines and probe times for this byte value
-        X = (relative_cache_line[:, None] == np.arange(table_cache_lines_count)).astype(np.float64)  # One-hot encoding of relative cache line
-        mean_X = np.mean(X, axis=0, keepdims=True)
-        std_X = np.std(X, axis=0, keepdims=True)
-
-        cov = (X.T @ Y_filtered) / N - (mean_X.T @ mean_Y)
-        denom = std_X.T @ std_Y
+        probability = counts / N
+        cov = sums / N - probability[:, None] * mean_Y
+        std_X = np.sqrt(probability * (1 - probability))[:, None]
+        denom = std_X * std_Y
         M = np.abs(cov / denom)
 
         # for each possible set the table starts in 
+        relative_line_indices = np.arange(table_cache_lines_count)
         for table_start_set in range(num_sets):
-            relative_line_indices = np.arange(table_cache_lines_count)
             set_indices = (table_start_set + relative_line_indices) % num_sets  # which sets the relative cache lines map to
             total_score = np.sum(M[relative_line_indices, set_indices])
             results.append({
