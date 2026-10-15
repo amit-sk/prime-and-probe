@@ -94,7 +94,7 @@ def save_heatmap(data, num_sets, num_lines, title, cbar_label, output_path, vmin
     fig.colorbar(im, ax=ax, label=cbar_label)
     ax.set_title(title)
     ax.set_xlabel("Cache set")
-    ax.set_ylabel("Number of accessed lines")
+    ax.set_ylabel("Victim cache lines accessed")
     ax.set_xticks(range(0, num_sets, 4))
     ax.set_yticks(range(0, num_lines + 1))
 
@@ -110,13 +110,13 @@ def read_results(file_path, absolute_output=ABSOLUTE_OUTPUT, normalized_output=N
 
     save_heatmap(
         heatmap_abs, num_sets, num_lines,
-        "Absolute average Prime+Probe time (per-set baseline dominates)",
-        "Average probe time", absolute_output,
+        "Prime+Probe response to synthetic victim accesses — absolute",
+        "Mean probe time (timer ticks)", absolute_output,
     )
     save_heatmap(
         heatmap_norm, num_sets, num_lines,
-        "Per-set normalized Prime+Probe heatmap (eviction signal)",
-        "Probe time above set's own baseline", normalized_output, vmin=0,
+        "Prime+Probe response to synthetic victim accesses — per-set normalized",
+        "Baseline-subtracted mean probe time (timer ticks)", normalized_output, vmin=0,
     )
 
 

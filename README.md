@@ -94,7 +94,6 @@ Options:
 - `input_file` — path to the `aes_pp` CSV (default `./results/raw/aes_results.csv`).
 - `--key <32-hex>` — the known master key. Adds true-key markers to the key-hypothesis heatmap and reports how many of the 16 bytes were recovered. Omit it and the figures still render, just without the ground-truth overlay (the recovery itself does not use the key).
 - `--limit N` — use only the first `N` traces (subsample).
-- `--title <text>` — prefix for the key-hypothesis heatmap title.
 - `--heatmap-out <path>` / `--table-out <path>` — override the figure output paths.
 - `--recovery-curve` — also plot recovered bytes vs. number of encryptions over prefixes of the capture (requires `--key`; slow, as it re-runs the attack per prefix). `--recovery-out <path>` overrides its output path.
 

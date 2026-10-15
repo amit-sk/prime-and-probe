@@ -54,7 +54,6 @@ SBOX = [
 
 RCON = [0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36]
 
-GROUP_COLORS = ["#4C72B0", "#DD8452", "#55A868", "#C44E52"]   # ciphertext-byte groups 0..3
 BYTE_COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]    # the 4 bytes within a subplot
 
 KEY_HEATMAP_OUTPUT = "./results/aes_key_hypotheses.png"
@@ -118,42 +117,34 @@ def estimate(matrices):
     return col_max, indep_set, indep_key
 
 
-def make_key_heatmap(matrices, indep_set, indep_key, n_rows, title, output_path, true_k10=None):
+def make_key_heatmap(matrices, indep_set, indep_key, output_path, true_k10=None):
     """Per-byte key-hypothesis scores, each row taken at that byte's own best table set."""
     profile = np.vstack([matrices[i][:, indep_set[i]] for i in range(16)])
     norm = ((profile - profile.min(1, keepdims=True))
             / (profile.max(1, keepdims=True) - profile.min(1, keepdims=True) + 1e-12))
 
-    plt.rcParams.update({"font.size": 8, "axes.edgecolor": "#888", "axes.linewidth": .6,
+    plt.rcParams.update({"font.size": 12.5, "axes.edgecolor": "#888", "axes.linewidth": .6,
                          "figure.facecolor": "white"})
     fig, ax = plt.subplots(figsize=(13, 5))
     image = ax.imshow(norm, aspect="auto", cmap="viridis")
 
     ax.scatter(indep_key, range(16), marker="_", s=120, color="w", lw=1.4)
-    handles = [Line2D([], [], marker="_", color="w", mew=1.6, ls="", ms=12, label="script's pick")]
+    handles = [Line2D([], [], marker="_", color="w", mew=1.6, ls="", ms=12, label="Selected candidate")]
     n_correct = None
     if true_k10 is not None:
         ax.scatter(true_k10, range(16), marker="o", s=90,
                    facecolors="none", edgecolors="#E8000B", lw=1.8)
         handles.insert(0, Line2D([], [], marker="o", mfc="none", mec="#E8000B", mew=1.8,
-                                 ls="", ms=9, label="true key"))
+                                 ls="", ms=9, label="True key"))
         n_correct = int(sum(indep_key[i] == int(true_k10[i]) for i in range(16)))
 
-    ax.legend(handles=handles, loc="upper right", framealpha=.85, fontsize=7.5)
+    ax.legend(handles=handles, loc="lower left", framealpha=.85, fontsize=11.5)
     ax.set_yticks(range(16))
-    ax.set_yticklabels([f"byte {i}" for i in range(16)])
-    for i in range(16):
-        ax.get_yticklabels()[i].set_color(GROUP_COLORS[i % 4])
-    ax.set_xlabel("key-byte hypothesis (0-255)")
-    ax.set_ylabel("ciphertext byte")
-    fig.colorbar(image, ax=ax, fraction=.025, pad=.01).set_label("normalised score (per row)")
+    ax.set_xlabel("Key-byte hypothesis (0–255)")
+    ax.set_ylabel("Final-round key-byte position")
+    fig.colorbar(image, ax=ax, fraction=.025, pad=.01).set_label("Normalized score (per row)")
 
-    suptitle = f"AES key-hypothesis heatmap  -  {n_rows:,} traces"
-    if n_correct is not None:
-        suptitle += f",  recovered {n_correct}/16 bytes"
-    if title:
-        suptitle = f"{title}:  " + suptitle
-    fig.suptitle(suptitle, fontsize=12, fontweight="bold")
+    ax.set_title("AES final-round key-byte hypotheses", fontsize=15.5, pad=10)
 
     fig.tight_layout()
     fig.savefig(output_path, dpi=140, bbox_inches="tight")
@@ -244,17 +235,27 @@ def make_recovery_curve(points, output_path):
     ax.set_yticks(range(0, 17, 2))
     ax.axhline(16, color="#888", lw=0.8, ls=":")
     ax.grid(True, which="both", alpha=0.25)
-    ax.set_xlabel("number of encryptions (prefix of the capture)")
-    ax.set_ylabel("correctly recovered key bytes (of 16)")
-    ax.set_title("AES key bytes recovered vs. number of encryptions\n"
-                 "(recovery from one capture's prefixes; not a success rate)")
+    ax.set_xlabel("Number of encryptions")
+    ax.set_ylabel("Correct final-round key bytes")
+    ax.set_title("AES key recovery versus number of encryptions")
+
+    # Mark the first tested count that reaches full recovery.
+    first16 = next((x for x, y in points if y == 16), None)
+    if first16 is not None:
+        num = f"{first16:,}".replace(",", "{,}")
+        ax.annotate(f"16/16 bytes at $N = {num}$",
+                    xy=(first16, 16), xytext=(first16 * 1.5, 11.0),
+                    ha="left", va="center", fontsize=8.5, color="#333",
+                    arrowprops=dict(arrowstyle="->", color="#C44E52", lw=1.3,
+                                    shrinkB=5))
+
     fig.tight_layout()
     fig.savefig(output_path, dpi=140, bbox_inches="tight")
     plt.close(fig)
     print(f"wrote {output_path}")
 
 
-def read_results(file_path, master_key_hex=None, limit=None, title="",
+def read_results(file_path, master_key_hex=None, limit=None,
                  key_heatmap_output=KEY_HEATMAP_OUTPUT,
                  table_location_output=TABLE_LOCATION_OUTPUT,
                  plot_recovery=False, recovery_curve_output=RECOVERY_CURVE_OUTPUT):
@@ -286,8 +287,7 @@ def read_results(file_path, master_key_hex=None, limit=None, title="",
     print('Original AES-128 master key (Round Key 0):')
     print(' '.join(f'{b:02X}' for b in k0_bytes))
 
-    make_key_heatmap(matrices, indep_set, indep_key, n_rows, title,
-                     key_heatmap_output, true_k10=true_k10)
+    make_key_heatmap(matrices, indep_set, indep_key, key_heatmap_output, true_k10=true_k10)
     make_table_location(col_max, indep_set, num_sets, table_location_output)
 
     if plot_recovery:
@@ -438,7 +438,6 @@ def main():
                         help="known 32-hex master key; adds true-key markers + recovered count")
     parser.add_argument("--limit", type=int, default=None,
                         help="use only the first N rows (subsample)")
-    parser.add_argument("--title", default="", help="optional prefix for the key-heatmap title")
     parser.add_argument("--heatmap-out", default=KEY_HEATMAP_OUTPUT,
                         help=f"key-hypothesis heatmap path (default: {KEY_HEATMAP_OUTPUT})")
     parser.add_argument("--table-out", default=TABLE_LOCATION_OUTPUT,
@@ -450,7 +449,7 @@ def main():
     parser.add_argument("--recovery-out", default=RECOVERY_CURVE_OUTPUT,
                         help=f"recovery-curve figure path (default: {RECOVERY_CURVE_OUTPUT})")
     args = parser.parse_args()
-    read_results(args.input_file, master_key_hex=args.key, limit=args.limit, title=args.title,
+    read_results(args.input_file, master_key_hex=args.key, limit=args.limit,
                  key_heatmap_output=args.heatmap_out, table_location_output=args.table_out,
                  plot_recovery=args.recovery_curve, recovery_curve_output=args.recovery_out)
 
