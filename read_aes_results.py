@@ -1,7 +1,12 @@
+import argparse
+
 import pandas as pd
 import polars as pl
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")           # headless; set before pyplot is imported
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 
 CIPHER_TEXT_SIZE = 16
@@ -49,6 +54,13 @@ SBOX = [
 
 RCON = [0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36]
 
+GROUP_COLORS = ["#4C72B0", "#DD8452", "#55A868", "#C44E52"]   # ciphertext-byte groups 0..3
+BYTE_COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]    # the 4 bytes within a subplot
+
+KEY_HEATMAP_OUTPUT = "./results/aes_key_hypotheses.png"
+TABLE_LOCATION_OUTPUT = "./results/aes_table_location.png"
+RECOVERY_CURVE_OUTPUT = "./results/aes_recovery_curve.png"
+
 
 def _read_aes_pp_results(file_path):
     with open(file_path, 'r') as f:
@@ -63,40 +75,230 @@ def _read_aes_pp_results(file_path):
     )
 
 
-def read_results(file_path):
+def round10_key(master_key_hex):
+    """Expand an AES-128 master key and return round-key 10 as 16 ints (ground truth)."""
+    master = bytes.fromhex(master_key_hex)
+    words = [list(master[i:i + 4]) for i in range(0, 16, 4)]
+    for i in range(4, 44):
+        tmp = list(words[i - 1])
+        if i % 4 == 0:
+            tmp = [SBOX[tmp[1]], SBOX[tmp[2]], SBOX[tmp[3]], SBOX[tmp[0]]]
+            tmp[0] ^= RCON[i // 4]
+        words.append([words[i - 4][j] ^ tmp[j] for j in range(4)])
+    return np.array(sum(words[40:44], []), dtype=int)
+
+
+def score_matrices(df, prepared_data, num_sets, verbose=True):
+    """Per ciphertext byte: a [key_byte (256) x table_start_set (num_sets)] score matrix."""
+    matrices = []
+    for byte_index in range(CIPHER_TEXT_SIZE):
+        if verbose:
+            print(f'  correlation for ciphertext byte {byte_index}...')
+        results = run_correlation(df, byte_index, prepared_data=prepared_data)
+        matrix = (
+            results.pivot(index='key_byte_value', columns='table_start_set', values='score')
+            .sort_index()
+            .reindex(columns=range(num_sets))
+            .to_numpy()
+        )
+        matrices.append(matrix)
+    return matrices
+
+
+def estimate(matrices):
+    """Independent per-byte table location + key pick (no joint/pooled estimation).
+
+    Each ciphertext byte picks its (key, table start set) by a global argmax over
+    its OWN 256 x num_sets score matrix -- the bytes are never combined.
+    """
+    col_max = [m.max(axis=0) for m in matrices]                 # best score vs start_set
+    indep_set = [int(np.argmax(c)) for c in col_max]            # each byte's own table set
+    indep_key = [int(np.argmax(matrices[i][:, indep_set[i]]))   # key at that set
+                 for i in range(CIPHER_TEXT_SIZE)]
+    return col_max, indep_set, indep_key
+
+
+def make_key_heatmap(matrices, indep_set, indep_key, n_rows, title, output_path, true_k10=None):
+    """Per-byte key-hypothesis scores, each row taken at that byte's own best table set."""
+    profile = np.vstack([matrices[i][:, indep_set[i]] for i in range(16)])
+    norm = ((profile - profile.min(1, keepdims=True))
+            / (profile.max(1, keepdims=True) - profile.min(1, keepdims=True) + 1e-12))
+
+    plt.rcParams.update({"font.size": 8, "axes.edgecolor": "#888", "axes.linewidth": .6,
+                         "figure.facecolor": "white"})
+    fig, ax = plt.subplots(figsize=(13, 5))
+    image = ax.imshow(norm, aspect="auto", cmap="viridis")
+
+    ax.scatter(indep_key, range(16), marker="_", s=120, color="w", lw=1.4)
+    handles = [Line2D([], [], marker="_", color="w", mew=1.6, ls="", ms=12, label="script's pick")]
+    n_correct = None
+    if true_k10 is not None:
+        ax.scatter(true_k10, range(16), marker="o", s=90,
+                   facecolors="none", edgecolors="#E8000B", lw=1.8)
+        handles.insert(0, Line2D([], [], marker="o", mfc="none", mec="#E8000B", mew=1.8,
+                                 ls="", ms=9, label="true key"))
+        n_correct = int(sum(indep_key[i] == int(true_k10[i]) for i in range(16)))
+
+    ax.legend(handles=handles, loc="upper right", framealpha=.85, fontsize=7.5)
+    ax.set_yticks(range(16))
+    ax.set_yticklabels([f"byte {i}" for i in range(16)])
+    for i in range(16):
+        ax.get_yticklabels()[i].set_color(GROUP_COLORS[i % 4])
+    ax.set_xlabel("key-byte hypothesis (0-255)")
+    ax.set_ylabel("ciphertext byte")
+    fig.colorbar(image, ax=ax, fraction=.025, pad=.01).set_label("normalised score (per row)")
+
+    suptitle = f"AES key-hypothesis heatmap  -  {n_rows:,} traces"
+    if n_correct is not None:
+        suptitle += f",  recovered {n_correct}/16 bytes"
+    if title:
+        suptitle = f"{title}:  " + suptitle
+    fig.suptitle(suptitle, fontsize=12, fontweight="bold")
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=140, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {output_path}" + (f"  (recovered {n_correct}/16)" if n_correct is not None else ""))
+
+
+def make_table_location(col_max, indep_set, num_sets, output_path):
+    """Per-group subplot, 4 independent byte curves (best score = max over key guesses).
+
+    Each curve's dot marks that byte's own peak (its independent table-location
+    estimate); the dashed line marks the set the group's four bytes agree on.
+    All panels share one vertical scale so peak-strength differences show.
+    """
+    plt.rcParams.update({"font.size": 8})
+    ymax = max(c.max() for c in col_max)
+    fig, axes = plt.subplots(2, 2, figsize=(13, 7), sharex=True, sharey=True)
+    for group, ax in zip(range(4), axes.ravel()):
+        bytes_in_group = [group + 4 * j for j in range(4)]
+        for k, i in enumerate(bytes_in_group):
+            ax.plot(range(num_sets), col_max[i], color=BYTE_COLORS[k], lw=1.2,
+                    label=f"byte {i}  (peak set {indep_set[i]})")
+            ax.plot(indep_set[i], col_max[i][indep_set[i]], "o",
+                    color=BYTE_COLORS[k], ms=4)
+        # The set the four independent estimates agree on (mode of their peaks).
+        group_peaks = [indep_set[i] for i in bytes_in_group]
+        common = max(set(group_peaks), key=group_peaks.count)
+        ax.axvline(common, color="#333", lw=1.0, ls="--",
+                   label=f"independent estimate -> set {common}")
+        ax.set_title(f"Group {group}  (bytes {group}, {group + 4}, {group + 8}, {group + 12})")
+        # Keep the legend off the peak: opposite side to where it sits.
+        loc = "upper left" if common > num_sets / 2 else "upper right"
+        ax.legend(fontsize=6.5, loc=loc, framealpha=.9)
+    axes[0, 0].set_ylim(0, ymax * 1.05)          # shared scale (sharey) across all panels
+    for ax in axes[:, 0]:
+        ax.set_ylabel("best score (max over 256 key guesses)")
+    for ax in axes[-1]:
+        ax.set_xlabel("cache set (table start position)")
+
+    fig.suptitle("Independent estimates of AES T-table locations",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=140, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {output_path}")
+
+
+def recovery_prefixes(n_rows, num_points=16, start=2000):
+    """Log-spaced prefix sizes, from `start` traces up to the full capture."""
+    start = min(start, n_rows)
+    prefixes = np.unique(np.geomspace(start, n_rows, num_points).astype(int))
+    if prefixes[-1] != n_rows:
+        prefixes = np.append(prefixes, n_rows)
+    return prefixes.tolist()
+
+
+def recovery_curve(df, true_k10, prefixes):
+    """Correctly recovered key bytes using only the first N traces, for each N.
+
+    This analyses PREFIXES of a single capture, so it traces how recovery of
+    THIS run grew with data -- it is not a success rate, which would require many
+    independent captures at each N.
+    """
+    points = []
+    for n in prefixes:
+        sub = df.head(int(n))
+        # Tiny prefixes leave some ciphertext-byte values unseen (empty bins ->
+        # 0/0 in the correlation); ignore those warnings, the result is just noise.
+        with np.errstate(all='ignore'):
+            prepared = _prepare_correlation_data(sub)
+            matrices = score_matrices(sub, prepared, prepared[4], verbose=False)
+        _, _, indep_key = estimate(matrices)
+        n_correct = int(sum(indep_key[i] == int(true_k10[i]) for i in range(16)))
+        points.append((int(n), n_correct))
+        print(f'  N={int(n):>9,}: recovered {n_correct}/16')
+    return points
+
+
+def make_recovery_curve(points, output_path):
+    """Figure: correctly recovered key bytes vs. number of encryptions (one capture)."""
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    plt.rcParams.update({"font.size": 9})
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(xs, ys, marker="o", ms=5, color="#4C72B0", lw=1.5)
+    ax.set_xscale("log")
+    ax.set_ylim(-0.5, 16.5)
+    ax.set_yticks(range(0, 17, 2))
+    ax.axhline(16, color="#888", lw=0.8, ls=":")
+    ax.grid(True, which="both", alpha=0.25)
+    ax.set_xlabel("number of encryptions (prefix of the capture)")
+    ax.set_ylabel("correctly recovered key bytes (of 16)")
+    ax.set_title("AES key bytes recovered vs. number of encryptions\n"
+                 "(recovery from one capture's prefixes; not a success rate)")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=140, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {output_path}")
+
+
+def read_results(file_path, master_key_hex=None, limit=None, title="",
+                 key_heatmap_output=KEY_HEATMAP_OUTPUT,
+                 table_location_output=TABLE_LOCATION_OUTPUT,
+                 plot_recovery=False, recovery_curve_output=RECOVERY_CURVE_OUTPUT):
     df = _read_aes_pp_results(file_path)
+    if limit:
+        df = df.head(limit)
+    n_rows = df.height
+    true_k10 = round10_key(master_key_hex) if master_key_hex else None
+
+    print('Preparing correlation data...')
     prepared_data = _prepare_correlation_data(df)
-    total_results = []
-    for i in range(CIPHER_TEXT_SIZE):
-        print(f'Running correlation for ciphertext byte index {i}...')
-        results = run_correlation(df, i, prepared_data=prepared_data).sort_values(by='score', ascending=False)
-        total_results.append({
-            'ciphertext_index': i,
-            'key_hex': results.iloc[0]['key_hex'],
-            'table_start_set': results.iloc[0]['table_start_set'],
-        })
-        # print(f'Ciphertext index {i} top 5 guesses:')
-        # print(f'{results.head(5).to_string(index=False)}\n')
+    num_sets = prepared_data[4]
+    print(f'Scoring {CIPHER_TEXT_SIZE} ciphertext bytes over {num_sets} sets...')
+    matrices = score_matrices(df, prepared_data, num_sets)
+    col_max, indep_set, indep_key = estimate(matrices)
 
-    results_df = pd.DataFrame(total_results).set_index('ciphertext_index')
+    # Each T-table group (index % 4) indexes one table; its four bytes should
+    # independently land on the same start set. Report whether they agree.
+    print('\nPer-byte independent table start sets:')
+    for group in range(4):
+        bytes_in_group = [group + 4 * j for j in range(CIPHER_TEXT_SIZE // 4)]
+        sets = [indep_set[i] for i in bytes_in_group]
+        agreement = 'agree' if len(set(sets)) == 1 else 'DISAGREE'
+        print(f'  group {group} (bytes {bytes_in_group}): {sets}  [{agreement}]')
 
-    # each T-table group (index % 4) should have the same table_start_set
-    results_df['t_table_group'] = results_df.index % 4
-    table_sets = results_df.groupby(results_df.index % 4)['table_start_set'].unique()
-    if any(len(sets) > 1 for sets in table_sets):
-        print("Warning: Inconsistent table_start_set values for T-table groups:")
-        print(table_sets)
-        print("This may indicate an issue with the correlation analysis or the data.")
-    else:
-        print('\nCorrelation analysis completed successfully.')
-        print("Final round key:")
-        key = results_df['key_hex'].str[2:].to_list()
-        print(' '.join(key))
-        k10_hex = ''.join(key)
-        k10_bytes = bytes.fromhex(k10_hex)
-        k0_bytes = reverse_key_schedule_128(k10_bytes)
-        print('Original AES-128 master key (Round Key 0):')
-        print(' '.join(f'{b:02X}' for b in k0_bytes))
+    print('\nFinal round key:')
+    print(' '.join(f'{b:02X}' for b in indep_key))
+    k0_bytes = reverse_key_schedule_128(bytes(indep_key))
+    print('Original AES-128 master key (Round Key 0):')
+    print(' '.join(f'{b:02X}' for b in k0_bytes))
+
+    make_key_heatmap(matrices, indep_set, indep_key, n_rows, title,
+                     key_heatmap_output, true_k10=true_k10)
+    make_table_location(col_max, indep_set, num_sets, table_location_output)
+
+    if plot_recovery:
+        if true_k10 is None:
+            print('\nskipping recovery curve: --key is required to judge correctness')
+        else:
+            prefixes = recovery_prefixes(n_rows)
+            print(f'\nBuilding recovery curve over {len(prefixes)} capture prefixes '
+                  f'(re-runs the attack per prefix; this is slow)...')
+            points = recovery_curve(df, true_k10, prefixes)
+            make_recovery_curve(points, recovery_curve_output)
 
 
 def _prepare_correlation_data(df):
@@ -122,8 +324,11 @@ def _prepare_correlation_data(df):
     mean_Y = np.asarray(statistics[:num_sets], dtype=np.float64)[None, :]
     std_Y = np.asarray(statistics[num_sets:], dtype=np.float64)[None, :]
 
-    byte_counts = np.empty((CIPHER_TEXT_SIZE, 256), dtype=np.int64)
-    byte_sums = np.empty((CIPHER_TEXT_SIZE, 256, num_sets), dtype=np.float64)
+    # Scatter each group's aggregate into full 256-length arrays indexed by the
+    # ciphertext-byte value. A value that never occurs (possible on small
+    # prefixes/--limit) simply stays zero instead of shifting the rows.
+    byte_counts = np.zeros((CIPHER_TEXT_SIZE, 256), dtype=np.int64)
+    byte_sums = np.zeros((CIPHER_TEXT_SIZE, 256, num_sets), dtype=np.float64)
     for byte_index in range(CIPHER_TEXT_SIZE):
         grouped = clipped.with_columns(
             pl.col('ciphertext').str.slice(byte_index * 2, 2)
@@ -131,9 +336,10 @@ def _prepare_correlation_data(df):
         ).group_by('cipher_byte').agg(
             [pl.len().alias('count')]
             + [pl.col(column).sum().alias(column) for column in probe_columns]
-        ).sort('cipher_byte')
-        byte_counts[byte_index] = grouped['count'].to_numpy()
-        byte_sums[byte_index] = grouped.select(probe_columns).to_numpy().astype(
+        )
+        cipher_byte = grouped['cipher_byte'].to_numpy()
+        byte_counts[byte_index, cipher_byte] = grouped['count'].to_numpy()
+        byte_sums[byte_index, cipher_byte] = grouped.select(probe_columns).to_numpy().astype(
             np.float64, copy=False
         )
 
@@ -223,8 +429,30 @@ def reverse_key_schedule_128(k10_bytes: bytes) -> bytes:
 
 
 def main():
-    file_path = "./results/raw/aes_results.csv"
-    read_results(file_path)
+    parser = argparse.ArgumentParser(
+        description="Recover the AES-128 key from prime+probe measurements and plot diagnostics."
+    )
+    parser.add_argument("input_file", nargs="?", default="./results/raw/aes_results.csv",
+                        help="CSV produced by aes_pp (default: ./results/raw/aes_results.csv)")
+    parser.add_argument("--key", default=None,
+                        help="known 32-hex master key; adds true-key markers + recovered count")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="use only the first N rows (subsample)")
+    parser.add_argument("--title", default="", help="optional prefix for the key-heatmap title")
+    parser.add_argument("--heatmap-out", default=KEY_HEATMAP_OUTPUT,
+                        help=f"key-hypothesis heatmap path (default: {KEY_HEATMAP_OUTPUT})")
+    parser.add_argument("--table-out", default=TABLE_LOCATION_OUTPUT,
+                        help=f"table-location figure path (default: {TABLE_LOCATION_OUTPUT})")
+    parser.add_argument("--recovery-curve", action="store_true",
+                        help="also plot correctly-recovered bytes vs. number of encryptions, "
+                             "by re-running the attack on prefixes of the capture "
+                             "(requires --key; slow)")
+    parser.add_argument("--recovery-out", default=RECOVERY_CURVE_OUTPUT,
+                        help=f"recovery-curve figure path (default: {RECOVERY_CURVE_OUTPUT})")
+    args = parser.parse_args()
+    read_results(args.input_file, master_key_hex=args.key, limit=args.limit, title=args.title,
+                 key_heatmap_output=args.heatmap_out, table_location_output=args.table_out,
+                 plot_recovery=args.recovery_curve, recovery_curve_output=args.recovery_out)
 
 
 if __name__ == "__main__":

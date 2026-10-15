@@ -26,10 +26,13 @@ python ./read_results.py
 All in one:
 
 ```bash
-make pp && taskset -c 0 ./pp && python ./read_results.p
+make pp && taskset -c 0 ./pp && python ./read_results.py
 ```
 
-Expects the raw results to be in `./results/raw/results.csv` (very large file). Creates the prime+probe heatmap (saved to `./results/prime_probe_heatmap.png`).
+Expects the raw results to be in `./results/raw/results.csv` (very large file; it is streamed, so memory stays low). Creates two heatmaps:
+
+- `./results/prime_probe_heatmap.png` - absolute average probe time per (accessed lines, cache set).
+- `./results/prime_probe_heatmap_normalized.png` - the same with each set's own 0-access baseline subtracted, isolating the eviction signal.
 
 ## Probe Single Set
 
@@ -73,36 +76,52 @@ The measurements are saved to `./results/raw/aes_results.csv`. The file will con
 
 ## Running analysis - correlation attacks
 
-Correlation attack to try to obtain the final round key (and original master key) for the AES encryption. If there isn't enough data, this will likely fail.
+Correlation attack to recover the AES final-round key (and the original master key). If there isn't enough data, this will likely fail. Alongside the recovered key it writes two diagnostic figures:
 
-Expects results file in `./results/raw/aes_results.csv`.
+- `./results/aes_key_hypotheses.png` — per ciphertext byte, the normalized correlation score for every one of the 256 key-byte guesses (bright column = winning guess).
+- `./results/aes_table_location.png` — per T-table group, each byte's independent estimate of where its table starts in the cache (a sharp peak = table located).
+
+With `--recovery-curve` (and `--key`) it also writes `./results/aes_recovery_curve.png` — correctly recovered key bytes vs. number of encryptions, obtained by re-running the attack on increasing prefixes of the capture. This is the recovery trajectory of that one capture, not a success rate (a success rate would require many independent captures at each size).
+
+Defaults to the results file `./results/raw/aes_results.csv`:
 
 ```bash
 python ./read_aes_results.py
 ```
 
-Example output:
-```bash
-Running correlation for ciphertext byte index 0...
-Running correlation for ciphertext byte index 1...
-Running correlation for ciphertext byte index 2...
-Running correlation for ciphertext byte index 3...
-Running correlation for ciphertext byte index 4...
-Running correlation for ciphertext byte index 5...
-Running correlation for ciphertext byte index 6...
-Running correlation for ciphertext byte index 7...
-Running correlation for ciphertext byte index 8...
-Running correlation for ciphertext byte index 9...
-Running correlation for ciphertext byte index 10...
-Running correlation for ciphertext byte index 11...
-Running correlation for ciphertext byte index 12...
-Running correlation for ciphertext byte index 13...
-Running correlation for ciphertext byte index 14...
-Running correlation for ciphertext byte index 15...
+Options:
 
-Correlation analysis completed successfully.
+- `input_file` — path to the `aes_pp` CSV (default `./results/raw/aes_results.csv`).
+- `--key <32-hex>` — the known master key. Adds true-key markers to the key-hypothesis heatmap and reports how many of the 16 bytes were recovered. Omit it and the figures still render, just without the ground-truth overlay (the recovery itself does not use the key).
+- `--limit N` — use only the first `N` traces (subsample).
+- `--title <text>` — prefix for the key-hypothesis heatmap title.
+- `--heatmap-out <path>` / `--table-out <path>` — override the figure output paths.
+- `--recovery-curve` — also plot recovered bytes vs. number of encryptions over prefixes of the capture (requires `--key`; slow, as it re-runs the attack per prefix). `--recovery-out <path>` overrides its output path.
+
+Example (passing the capture's key to check recovery):
+
+```bash
+python ./read_aes_results.py results/raw/aes_results.csv --key 00112233445566778899aabbccddeeff
+```
+
+Example output:
+```
+Preparing correlation data...
+Scoring 16 ciphertext bytes over 64 sets...
+  correlation for ciphertext byte 0...
+  ...
+  correlation for ciphertext byte 15...
+
+Per-byte independent table start sets:
+  group 0 (bytes [0, 4, 8, 12]): [41, 41, 41, 41]  [agree]
+  group 1 (bytes [1, 5, 9, 13]): [25, 25, 25, 25]  [agree]
+  group 2 (bytes [2, 6, 10, 14]): [9, 9, 9, 9]  [agree]
+  group 3 (bytes [3, 7, 11, 15]): [57, 57, 57, 57]  [agree]
+
 Final round key:
 36 D0 24 46 1D 84 B8 37 5F C0 F9 C0 4C BA B6 BB
 Original AES-128 master key (Round Key 0):
 00 11 22 33 44 55 66 77 88 99 AA BB CC DD EE FF
+wrote ./results/aes_key_hypotheses.png  (recovered 16/16)
+wrote ./results/aes_table_location.png
 ```
